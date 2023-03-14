@@ -2,6 +2,7 @@
 #include "reinterpret_memory.h"
 #include "strict_alias.h"
 #include "transparently_serializable.h"
+#include "unpack_and_invoke.h"
 
 #include <cassert>
 #include <cstddef>
@@ -141,6 +142,22 @@ static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<char&&>(s
 static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const char&&>(std::declval<const int&&>())), const char&&>);
 static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const char&>(std::declval<const int&>())), const char&>);
 
+#include <iostream>
+
+template <typename... Ts>
+auto test() noexcept
+{
+	auto fun = [](std::uint32_t u, float f[], std::size_t n)
+	{
+		std::cout << u << std::endl;	
+		for (auto i = std::size_t{}; i < n; ++i)
+			std::cout << f[i] << std::endl;
+	};
+	alignas(Ts...) std::byte buf[sizeof(std::uint32_t) + sizeof(float[2])]{};
+	std::memcpy(buf, "hello world", sizeof(buf));
+	return data_serialization::unpack_and_invoke<decltype(fun), Ts...>(fun, buf, sizeof(buf));
+}
+
 int main()
 {
 	std::unordered_set<B1> u;
@@ -158,6 +175,8 @@ int main()
 	assert(std::next(m.begin(), 2)->get<0>() == 1);
 	assert(u.contains([] {B1 b{}; b.set<0>(1); return b; }()));
 	assert(u.contains(B1{}));
+
+	test<std::uint32_t, float[]>();
 
 	return 0;
 }
