@@ -64,8 +64,8 @@ This is a simple wrapper around reinterpret cast which determines if the destina
 
 ```
 int x = -7;
-auto y = *type_conversion::strict_alias_cast<unsigned>(&x); //okay, x may be inspected as an unsigned.
-//auto z = *type_conversion::strict_alias_cast<float>(&x); //fails to compile.
+auto y = *type_conversion::strict_alias_cast<unsigned*>(&x); //okay, x may be inspected as an unsigned.
+//auto z = *type_conversion::strict_alias_cast<float*>(&x); //fails to compile.
 //auto f = *reinterpret_cast<float*>(&x); //undefined behavior.
 ```
 

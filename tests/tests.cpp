@@ -135,11 +135,11 @@ static_assert(not type_conversion::detail::strict_alias<const int (*)(int*), int
 static_assert(type_conversion::detail::strict_alias<int (*)(int* const), int (*)(int*)>);
 static_assert(not type_conversion::detail::strict_alias<std::pair<int, int>, std::pair<const int, int>>);
 
-static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const char>(std::declval<int*>())), const char*>);
-static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<char>(std::declval<int&>())), char&>);
-static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<char>(std::declval<int&&>())), char&&>);
-static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const char>(std::declval<const int&&>())), const char&&>);
-static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const char>(std::declval<const int&>())), const char&>);
+static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const char*>(std::declval<int*>())), const char*>);
+static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<char&>(std::declval<int&>())), char&>);
+static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<char&&>(std::declval<int&&>())), char&&>);
+static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const char&&>(std::declval<const int&&>())), const char&&>);
+static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const char&>(std::declval<const int&>())), const char&>);
 
 int main()
 {

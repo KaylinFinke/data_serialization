@@ -69,22 +69,17 @@ namespace type_conversion {
 	}
 
 	template <typename T, typename U>
-	requires detail::strict_alias<T, U>
-	[[nodiscard]] T* strict_alias_cast(U* u) noexcept
+	requires std::is_pointer_v<T> and detail::strict_alias<std::remove_pointer_t<T>, U>
+	[[nodiscard]] auto strict_alias_cast(U* u) noexcept
 	{
-		return reinterpret_cast<T*>(u);
+		return reinterpret_cast<T>(u);
 	}
+
 	template <typename T, typename U>
-	requires detail::strict_alias<T, U>
-	[[nodiscard]] T& strict_alias_cast(U& u) noexcept
+	requires std::is_reference_v<T> and detail::strict_alias<std::remove_reference_t<T>, U>
+	[[nodiscard]] decltype(auto) strict_alias_cast(U&& u) noexcept
 	{
-		return reinterpret_cast<T&>(u);
-	}
-	template <typename T, typename U>
-	requires detail::strict_alias<T, U>
-	[[nodiscard]] T&& strict_alias_cast(U&& u) noexcept
-	{
-		return reinterpret_cast<T&&>(u);
+		return reinterpret_cast<T>(u);
 	}
 }
 
