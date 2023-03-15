@@ -53,6 +53,7 @@ static_assert(common_platform::is_common_platform);
 
 static constexpr auto field1 = common_platform::bitfield<std::integral_constant<signed, 7>>{ { {std::byte{0x7B} } } };
 static_assert(field1.get<0>() == -5); //signed fast path rank < int at 0.
+[[maybe_unused]] int x = field1;
 static_assert(sizeof(field1) == 1);
 static constexpr auto field2 = common_platform::bitfield<std::integral_constant<bool, 1>, std::integral_constant<signed, 7>>{ { { std::byte{0xF6} } } };
 static_assert(field2.get<1>() == -5); //signed fast path rank < int not at 0.

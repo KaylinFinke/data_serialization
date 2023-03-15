@@ -329,6 +329,12 @@ namespace common_platform {
 		{
 			return get<type_index<T>>();
 		}
+		template <typename T = type<0>>
+		requires (sizeof...(types) == 1 and std::same_as<T, type<0>>)
+		[[nodiscard]] constexpr operator T() const noexcept
+		{
+			return get<0>();
+		}
 
 	private:
 		[[nodiscard]] static constexpr auto bit(const auto n) noexcept
