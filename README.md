@@ -124,4 +124,5 @@ auto test() noexcept
 	std::memcpy(buf, "hello world", sizeof(buf));
 	return data_serialization::unpack_and_invoke<Ts...>(fun, std::forward_as_tuple("hello"), buf, sizeof(buf));
 }
+test<std::uint32_t, float[]>();
 ```

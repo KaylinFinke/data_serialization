@@ -85,6 +85,22 @@ namespace data_serialization {
 	{
 		return detail::unpack_and_invoke<Ts...>(std::index_sequence_for<Ts...>(), std::forward<std::remove_reference_t<decltype(f)>>(f), std::forward<std::remove_reference_t<decltype(args)>>(args), data, size);
 	}
+
+	template <typename... Ts, std::size_t N>
+	requires (common_platform::is_transparently_serializable_v<Ts...>
+	and common_platform::is_common_platform)
+	[[nodiscard]] auto unpack_and_invoke(auto&& f, std::byte(&data)[N])
+	{
+		return detail::unpack_and_invoke<Ts...>(std::index_sequence_for<Ts...>(), std::forward<std::remove_reference_t<decltype(f)>>(f), std::make_tuple(), data, sizeof(data));
+	}
+
+	template <typename... Ts, std::size_t N>
+	requires (common_platform::is_transparently_serializable_v<Ts...>
+	and common_platform::is_common_platform)
+	[[nodiscard]] auto unpack_and_invoke(auto&& f, auto&& args, std::byte(&data)[N])
+	{
+		return detail::unpack_and_invoke<Ts...>(std::index_sequence_for<Ts...>(), std::forward<std::remove_reference_t<decltype(f)>>(f), std::forward<std::remove_reference_t<decltype(args)>>(args), data, sizeof(data));
+	}
 }
 #endif
 #endif
