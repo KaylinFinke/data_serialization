@@ -45,10 +45,10 @@ namespace data_serialization {
 			else return *t;
 		}
 
-		template <typename F, typename... Ts, std::size_t... Is>
+		template <typename... Ts, std::size_t... Is>
 		requires common_platform::is_transparently_serializable_v<Ts...>
 		and ((not std::is_unbounded_array_v<std::tuple_element_t<Is, std::tuple<Ts...>>> or 1 + Is == sizeof...(Ts)) and ... and true)
-		[[nodiscard]] auto unpack_and_invoke(const std::index_sequence<Is...>&, F f, std::byte* data, const std::size_t size)
+		[[nodiscard]] auto unpack_and_invoke(const std::index_sequence<Is...>&, auto&& f, auto&& args, std::byte* data, const std::size_t size)
 		{
 			if constexpr (sizeof...(Ts)) {
 				auto more = true;
@@ -61,22 +61,29 @@ namespace data_serialization {
 					using A = std::remove_pointer_t<std::tuple_element_t<sizeof...(Ts) - 1, decltype(ptrs)>>;
 					if constexpr (std::is_unbounded_array_v<A>) {
 						auto n = (size - rsize) / sizeof(std::remove_extent_t<A>);
-						std::apply(f, std::tuple_cat(std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(n)));
+						std::apply(f, std::tuple_cat(args, std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(n)));
 					} else
-						std::apply(f, std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...));
+						std::apply(f, std::tuple_cat(args, std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...)));
 				} else
 					return false;
 			} else
-				f();
+				std::apply(f, args);
 			return true;
 		}
 	}
-	template <typename F, typename... Ts>
+	template <typename... Ts>
 	requires (common_platform::is_transparently_serializable_v<Ts...>
 	and common_platform::is_common_platform)
-	[[nodiscard]] auto unpack_and_invoke(F f, std::byte* data, std::size_t size) noexcept
+	[[nodiscard]] auto unpack_and_invoke(auto&& f, std::byte* data, std::size_t size) noexcept
 	{
-		return detail::unpack_and_invoke<F, Ts...>(std::index_sequence_for<Ts...>(), f, data, size);
+		return detail::unpack_and_invoke<Ts...>(std::index_sequence_for<Ts...>(), std::forward<std::remove_reference_t<decltype(f)>>(f), std::make_tuple(), data, size);
+	}
+	template <typename... Ts>
+	requires (common_platform::is_transparently_serializable_v<Ts...>
+	and common_platform::is_common_platform)
+	[[nodiscard]] auto unpack_and_invoke(auto&& f, auto&& args, std::byte* data, std::size_t size) noexcept
+	{
+		return detail::unpack_and_invoke<Ts...>(std::index_sequence_for<Ts...>(), std::forward<std::remove_reference_t<decltype(f)>>(f), std::forward<std::remove_reference_t<decltype(args)>>(args), data, size);
 	}
 }
 #endif

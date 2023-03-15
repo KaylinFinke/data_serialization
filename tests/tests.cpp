@@ -147,7 +147,7 @@ static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const cha
 template <typename... Ts>
 auto test() noexcept
 {
-	auto fun = [](std::uint32_t u, float f[], std::size_t n)
+	auto fun = [](const char*, std::uint32_t u, float f[], std::size_t n)
 	{
 		std::cout << u << std::endl;	
 		for (auto i = std::size_t{}; i < n; ++i)
@@ -155,7 +155,7 @@ auto test() noexcept
 	};
 	alignas(Ts...) std::byte buf[sizeof(std::uint32_t) + sizeof(float[2])]{};
 	std::memcpy(buf, "hello world", sizeof(buf));
-	return data_serialization::unpack_and_invoke<decltype(fun), Ts...>(fun, buf, sizeof(buf));
+	return data_serialization::unpack_and_invoke<Ts...>(fun, std::forward_as_tuple("hello"), buf, sizeof(buf));
 }
 
 int main()
