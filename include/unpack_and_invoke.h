@@ -22,7 +22,7 @@ namespace data_serialization {
 		}
 
 		template <typename T>
-		auto unpack_element(std::byte*& data, std::size_t& size) noexcept
+		[[nodiscard]] auto unpack_element(std::byte*& data, std::size_t& size) noexcept
 		{
 			using E = std::conditional_t<std::is_unbounded_array_v<T>, std::remove_extent_t<T>, T>;
 			auto sz = std::is_unbounded_array_v<T> ? size / sizeof(E) * sizeof(E) : sizeof(E);
@@ -38,7 +38,7 @@ namespace data_serialization {
 		}
 
 		template <typename T>
-		constexpr decltype(auto) repack_element(T* t) noexcept
+		[[nodiscard]] constexpr decltype(auto) repack_element(T* t) noexcept
 		{
 			using E = std::remove_extent_t<T>;
 			if constexpr (std::is_unbounded_array_v<T>) return reinterpret_cast<E*>(t);
@@ -61,13 +61,13 @@ namespace data_serialization {
 					using A = std::remove_pointer_t<std::tuple_element_t<sizeof...(Ts) - 1, decltype(ptrs)>>;
 					if constexpr (std::is_unbounded_array_v<A>) {
 						auto n = (size - rsize) / sizeof(std::remove_extent_t<A>);
-						std::apply(f, std::tuple_cat(args, std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(n)));
+						std::apply(f, std::tuple_cat(std::forward<std::remove_reference_t<decltype(args)>>(args), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(n)));
 					} else
-						std::apply(f, std::tuple_cat(args, std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...)));
+						std::apply(f, std::tuple_cat(std::forward<std::remove_reference_t<decltype(args)>>(args), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...)));
 				} else
 					return false;
 			} else
-				std::apply(f, args);
+				std::apply(f, std::forward<std::remove_reference_t<decltype(args)>>(args));
 			return true;
 		}
 	}

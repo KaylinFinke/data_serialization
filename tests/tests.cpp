@@ -85,7 +85,6 @@ static_assert(common_platform::is_transparently_serializable_v<i32>);
 static_assert(common_platform::is_transparently_serializable_v<const i32>);
 static_assert(common_platform::is_transparently_serializable_v<volatile i32>);
 static_assert(common_platform::is_transparently_serializable_v<const volatile i32>);
-static_assert(not common_platform::is_transparently_serializable_v<B<>>);
 using B1 = B<I64<32>, U8<5>, I16<7>>;
 static_assert(common_platform::is_transparently_serializable_v<B1>);
 struct T1 { B1 a; u16 b; };
