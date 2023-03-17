@@ -2,8 +2,10 @@
 #include "reinterpret_memory.h"
 #include "strict_alias.h"
 #include "transparently_serializable.h"
-#include "unpack_and_invoke.h"
+#include "invoke.h"
+#include "apply.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -147,15 +149,14 @@ static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const cha
 template <typename... Ts>
 auto test() noexcept
 {
-	auto fun = [](const char*, std::uint32_t u, float f[], std::size_t n)
+	auto fun = [](const char*, std::uint32_t u, float p[], std::size_t n)
 	{
 		std::cout << u << std::endl;	
-		for (auto i = std::size_t{}; i < n; ++i)
-			std::cout << f[i] << std::endl;
+		std::for_each_n(p, n, [](auto f) { std::cout << f << std::endl; });
 	};
 	alignas(Ts...) std::byte buf[sizeof(std::uint32_t) + sizeof(float[2])]{};
 	std::memcpy(buf, "hello world", sizeof(buf));
-	return data_serialization::unpack_and_invoke<Ts...>(fun, std::forward_as_tuple("hello"), buf, sizeof(buf));
+	return data_serialization::invoke<Ts...>(fun, std::forward_as_tuple("hello"), buf, sizeof(buf));
 }
 
 int main()
@@ -176,7 +177,25 @@ int main()
 	assert(u.contains([] {B1 b{}; b.set<0>(1); return b; }()));
 	assert(u.contains(B1{}));
 
-	test<std::uint32_t, float[]>();
+	std::ignore = test<std::uint32_t, float[]>();
+
+	struct foobar { std::uint32_t a; float b[2]; };
+	alignas(foobar) std::byte buf[sizeof(std::uint32_t) + sizeof(float[2])]{};
+
+	auto fun = [](std::uint32_t u, float(&a)[2]) 
+	{
+		std::cout << u << std::endl;
+		std::ranges::for_each(a, [](auto f) { std::cout << f << std::endl; });
+	}; //std::uint32_t and exactly 2 floats.
+	std::memcpy(buf, "hello world", sizeof(buf));
+	std::ignore = data_serialization::apply<foobar>(fun, buf, sizeof(buf));
+
+	auto fun2 = [](std::uint32_t u, float p[], std::size_t n) {
+		std::cout << u << std::endl;
+		std::for_each_n(p, n, [](auto f) { std::cout << f << std::endl; });	
+	}; //std::uint32_t and 0+ floats.
+	std::memcpy(buf, "flex array!", sizeof(buf));
+	std::ignore = data_serialization::apply<foobar>(fun2, buf, sizeof(buf));
 
 	return 0;
 }

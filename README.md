@@ -107,7 +107,7 @@ u4->x = 5; //okay.
 ```
 This requires the source and destination types be trivially copyable.
 
-# data_serialization::unpack_and_invoke
+# data_serialization::invoke
 This method unpacks an aligned buffer and calls the supplied object with the templated arguments if data is large enough to unpack all the arguments. The pack of types must be transparently serializable and this platform must be a common platform defined by common_platform::is_common_platform. It is on the user to ensure the buffer is at least as strictly aligned as the types in the pack (see below example for conformant use). Data is passed by reference to the callable object though the parameters need not be reference parameters. Allowable parameters are 0 or more fixed size parameters and an optional unbounded array at the end modeling a variable length array. If the unbounded array is specified, the last 2 parameters are a pointer to the element type of the unbounded array, and a std::size_t n which is the number of elements created in the resulting buffer accessible through the pointer. Returns true if the functor were invoked, and false otherwise. Optionally takes a tuple of arguments to forward to f along with the unpacked buffer.
 
 ```
@@ -122,7 +122,31 @@ auto test() noexcept
 	};
 	alignas(Ts...) std::byte buf[sizeof(std::uint32_t) + sizeof(float[2])]{};
 	std::memcpy(buf, "hello world", sizeof(buf));
-	return data_serialization::unpack_and_invoke<Ts...>(fun, std::forward_as_tuple("hello"), buf, sizeof(buf));
+	return data_serialization::invoke<Ts...>(fun, std::forward_as_tuple("hello"), buf, sizeof(buf));
 }
 test<std::uint32_t, float[]>();
+```
+
+# data_serialization::apply
+This method is nearly identical to the above but unpacks a reflectable class of transparently serializable members (basically, a C struct with no padding except potentially at the end) and calls a supplied functor over the members of the struct. If the final member of the struct should be treated as a flexible array of `std::add_reference_t<std::remove_extent_t<M>[]>` for some element member type M depends on the signature of the functor. If the supplied object is callable with
+a reference to the element types, it's a fixed size object. If the supplied object is callable with `std::add_pointer<std::remove_extent_t<M>>, std::size_t` as the final two parameters and all other parameters as references to the element types of T, then a variable size object is created in the buffer which has 0 or more Ts.
+
+```
+	struct foobar { std::uint32_t a; float b[2]; };
+	alignas(foobar) std::byte buf[sizeof(std::uint32_t) + sizeof(float[2])]{};
+
+	auto fun = [](std::uint32_t u, float(&a)[2]) 
+	{
+		std::cout << u << std::endl;
+		std::ranges::for_each(a, [](auto f) { std::cout << f << std::endl; });
+	}; //std::uint32_t and exactly 2 floats.
+	std::memcpy(buf, "hello world", sizeof(buf));
+	data_serialization::apply<foobar>(fun, buf, sizeof(buf));
+
+	auto fun2 = [](std::uint32_t u, float p[], std::size_t n) {
+		std::cout << u << std::endl;
+		std::for_each_n(p, n, [](auto f) { std::cout << f << std::endl; });	
+	}; //std::uint32_t and 0+ floats.
+	std::memcpy(buf, "flex array!", sizeof(buf));
+	data_serialization::apply<foobar>(fun2, buf, sizeof(buf));
 ```
