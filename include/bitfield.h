@@ -58,7 +58,7 @@ namespace common_platform {
 	{
 	private:
 		using common_type = typename std::conditional_t<bool(sizeof...(Ts)),
-			std::common_type<detail::underlying_integral<std::remove_cv_t<decltype(Ts::value)>>...>,
+			std::common_type<std::make_unsigned_t<decltype(+std::declval<detail::underlying_integral<std::remove_cv_t<decltype(Ts::value)>>>())>...>, 
 			std::enable_if<true, std::size_t>>::type;
 
 		using tuple = std::tuple<Ts...>;
@@ -334,6 +334,20 @@ namespace common_platform {
 		[[nodiscard]] constexpr operator T() const noexcept
 		{
 			return get<0>();
+		}
+
+		constexpr auto operator=(type<0>&& t) noexcept
+		{
+			static_assert(sizeof...(Ts) == 1);
+			set(t);
+			return t;
+		}
+
+		constexpr auto operator=(const type<0>& t) noexcept
+		{
+			static_assert(sizeof...(Ts) == 1);
+			set(t);
+			return t;
 		}
 
 	private:

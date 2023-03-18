@@ -161,6 +161,8 @@ auto test() noexcept
 
 int main()
 {
+	common_platform::bitfield<std::integral_constant<signed, 7>> f{};
+	f = signed(-5);
 	std::unordered_set<B1> u;
 	u.emplace(B1{});
 	u.emplace([] {B1 b{}; b.set<0>(1); return b; }());
