@@ -156,7 +156,7 @@ auto test() noexcept
 	};
 	alignas(Ts...) std::byte buf[sizeof(std::uint32_t) + sizeof(float[2])]{};
 	std::memcpy(buf, "hello world", sizeof(buf));
-	return data_serialization::invoke<Ts...>(fun, std::forward_as_tuple("hello"), buf, sizeof(buf));
+	return data_serialization::invoke<Ts...>(fun, std::forward_as_tuple("hello"), buf);
 }
 
 int main()
@@ -177,7 +177,7 @@ int main()
 	assert(u.contains([] {B1 b{}; b.set<0>(1); return b; }()));
 	assert(u.contains(B1{}));
 
-	std::ignore = test<std::uint32_t, float[]>();
+	test<std::uint32_t, float[]>();
 
 	struct foobar { std::uint32_t a; float b[2]; };
 	alignas(foobar) std::byte buf[sizeof(std::uint32_t) + sizeof(float[2])]{};
@@ -186,16 +186,17 @@ int main()
 	{
 		std::cout << u << std::endl;
 		std::ranges::for_each(a, [](auto f) { std::cout << f << std::endl; });
+		return 73;
 	}; //std::uint32_t and exactly 2 floats.
 	std::memcpy(buf, "hello world", sizeof(buf));
-	std::ignore = data_serialization::apply<foobar>(fun, buf, sizeof(buf));
+	assert(73 == data_serialization::apply<foobar>(fun, buf, sizeof(buf)));
 
 	auto fun2 = [](std::uint32_t u, float p[], std::size_t n) {
 		std::cout << u << std::endl;
 		std::for_each_n(p, n, [](auto f) { std::cout << f << std::endl; });	
 	}; //std::uint32_t and 0+ floats.
 	std::memcpy(buf, "flex array!", sizeof(buf));
-	std::ignore = data_serialization::apply<foobar>(fun2, buf, sizeof(buf));
+	data_serialization::apply<foobar>(fun2, buf, sizeof(buf));
 
 	return 0;
 }

@@ -12,43 +12,43 @@
 
 namespace data_serialization {
 	namespace detail {
-		template <typename F, typename T, std::size_t... Is>
-		[[nodiscard]] auto apply(const std::index_sequence<Is...>&, auto&& f, auto&& args, std::byte* data, std::size_t size)
+		template <typename F, typename Args, typename T, std::size_t... Is>
+		[[nodiscard]] decltype(auto) apply(const std::index_sequence<Is...>&, F&& f, Args&& args, std::byte* data, std::size_t size)
 		{
-			return data_serialization::invoke<std::remove_reference_t<std::tuple_element_t<Is, T>>...>(std::forward<std::remove_reference_t<decltype(f)>>(f), std::forward<std::remove_reference_t<decltype(args)>>(args), data, size);
+			return data_serialization::invoke<std::remove_reference_t<std::tuple_element_t<Is, T>>...>(std::forward<F>(f), std::forward<Args>(args), data, size);
 		}
 	}
 
 	template <common_platform::detail::reflectable_class T, typename F>
 	requires common_platform::is_common_platform and detail::is_unpack_invocable_v<F, T>
-	[[nodiscard]] auto apply(F&& f, std::byte* data, std::size_t size)
+	[[nodiscard]] decltype(auto) apply(F&& f, std::byte* data, std::size_t size)
 	{
 		using TT = detail::tuple_of_refs<T>;
-		return detail::apply<F, TT>(std::make_index_sequence<std::tuple_size_v<TT>>(), std::forward<F>(f), std::make_tuple(), data, size);
+		return detail::apply<F, std::tuple<>, TT>(std::make_index_sequence<std::tuple_size_v<TT>>(), std::forward<F>(f), std::make_tuple(), data, size);
 	}
 
 	template <common_platform::detail::reflectable_class T, typename Args, typename F>
 	requires common_platform::is_common_platform and detail::is_unpack_invocable_v<F, T, Args>
-	[[nodiscard]] auto apply(F&& f, Args&& args, std::byte* data, std::size_t size)
+	[[nodiscard]] decltype(auto) apply(F&& f, Args&& args, std::byte* data, std::size_t size)
 	{
 		using TT = detail::tuple_of_refs<T>;
-		return detail::apply<F, TT>(std::make_index_sequence<std::tuple_size_v<TT>>(), std::forward<F>(f), std::forward<Args>(args), data, size);
+		return detail::apply<F, Args, TT>(std::make_index_sequence<std::tuple_size_v<TT>>(), std::forward<F>(f), std::forward<Args>(args), data, size);
 	}
 
 	template <common_platform::detail::reflectable_class T, typename F>
 	requires common_platform::is_common_platform and detail::is_unpack_invocable_flex_v<F, T>
-	[[nodiscard]] auto apply(F&& f, std::byte* data, std::size_t size)
+	[[nodiscard]] decltype(auto) apply(F&& f, std::byte* data, std::size_t size)
 	{
 		using TT = detail::tuple_of_refs_flex<T>;
-		return detail::apply<F, TT>(std::make_index_sequence<std::tuple_size_v<TT>>(), std::forward<F>(f), std::make_tuple(), data, size);
+		return detail::apply<F, std::tuple<>, TT>(std::make_index_sequence<std::tuple_size_v<TT>>(), std::forward<F>(f), std::make_tuple(), data, size);
 	}
 
 	template <common_platform::detail::reflectable_class T, typename Args, typename F>
 	requires common_platform::is_common_platform and detail::is_unpack_invocable_flex_v<F, T, Args>
-	[[nodiscard]] auto apply(F&& f, Args&& args, std::byte* data, std::size_t size)
+	[[nodiscard]] decltype(auto) apply(F&& f, Args&& args, std::byte* data, std::size_t size)
 	{
 		using TT = detail::tuple_of_refs_flex<T>;
-		return detail::apply<F, TT>(std::make_index_sequence<std::tuple_size_v<TT>>(), std::forward<F>(f), std::forward<Args>(args), data, size);
+		return detail::apply<F, Args, TT>(std::make_index_sequence<std::tuple_size_v<TT>>(), std::forward<F>(f), std::forward<Args>(args), data, size);
 	}
 }
 #endif
