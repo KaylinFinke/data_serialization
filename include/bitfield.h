@@ -49,19 +49,19 @@ namespace common_platform {
 			value_type i;
 		};
 	}
-	template <typename... types>
-	requires (std::same_as<std::integral_constant<std::remove_cv_t<decltype(types::value)>, types::value>, types> and ...) and
-	(std::disjunction_v<std::is_integral<decltype(types::value)>, std::is_enum<decltype(types::value)>> and ...) and
-	((std::numeric_limits<type_conversion::detail::corresponding_unsigned_type<detail::underlying_integral<decltype(types::value)>>>::digits
-	>= static_cast<detail::underlying_integral<decltype(types::value)>>(types::value)) and ...)
+	template <typename... Ts>
+	requires (std::same_as<std::integral_constant<std::remove_cv_t<decltype(Ts::value)>, Ts::value>, Ts> and ...) and
+	(std::disjunction_v<std::is_integral<decltype(Ts::value)>, std::is_enum<decltype(Ts::value)>> and ...) and
+	((std::numeric_limits<type_conversion::detail::corresponding_unsigned_type<detail::underlying_integral<decltype(Ts::value)>>>::digits
+	>= static_cast<detail::underlying_integral<decltype(Ts::value)>>(Ts::value)) and ...)
 	struct bitfield final
 	{
 	private:
-		using common_type = typename std::conditional_t<bool(sizeof...(types)),
-			std::common_type<detail::underlying_integral<std::remove_cv_t<decltype(types::value)>>...>,
+		using common_type = typename std::conditional_t<bool(sizeof...(Ts)),
+			std::common_type<detail::underlying_integral<std::remove_cv_t<decltype(Ts::value)>>...>,
 			std::enable_if<true, std::size_t>>::type;
 
-		using tuple = std::tuple<types...>;
+		using tuple = std::tuple<Ts...>;
 
 		using native_types = std::tuple<unsigned char, unsigned short int, unsigned int, unsigned long int, unsigned long long int>;
 		using native_or_void = decltype(std::tuple_cat(std::declval<native_types>(), std::declval<std::tuple<void>>()));
@@ -94,14 +94,14 @@ namespace common_platform {
 			return not std::same_as<native_type<N>, void>;
 		}
 
-		static constexpr auto bits = std::size_t{ offset<sizeof...(types)>() };
+		static constexpr auto bits = std::size_t{ offset<sizeof...(Ts)>() };
 		static constexpr auto bytes = std::size_t{ bits / std::numeric_limits<unsigned char>::digits + ((bits % std::numeric_limits<unsigned char>::digits) not_eq 0) };
 
 		template <typename T, std::size_t N>
 		static consteval auto find_index(std::same_as<std::size_t> auto& i, std::same_as<bool> auto& unique) noexcept
 		{
 			if constexpr (std::is_same_v<T, type<N>>) {
-				unique = i == sizeof...(types);
+				unique = i == sizeof...(Ts);
 				i = N;
 			}
 		}
@@ -110,16 +110,16 @@ namespace common_platform {
 		[[nodiscard]] static consteval auto find_index(const std::index_sequence<Is...>&) noexcept
 		{
 			auto unique = true;
-			auto i = sizeof...(types);
+			auto i = sizeof...(Ts);
 			(find_index<T, Is>(i, unique), ...);
-			if (not unique) i = sizeof...(types);
+			if (not unique) i = sizeof...(Ts);
 			return i;
 		}
 
 		template <typename T>
 		[[nodiscard]] static consteval auto index() noexcept
 		{
-			return find_index<T>(std::index_sequence_for<types...>());
+			return find_index<T>(std::index_sequence_for<Ts...>());
 		}
 
 		template <typename T>
@@ -170,7 +170,7 @@ namespace common_platform {
 		// the behavior is undefined. initialize to {} if filling out your own structure.
 		//-------------------------------------------------------------------------------------
 		template <std::size_t N>
-		requires (N < sizeof...(types) && (not size<N>() || has_fast_path<N>()))
+		requires (N < sizeof...(Ts) and (not size<N>() or has_fast_path<N>()))
 		constexpr auto set(const type<N> value) noexcept
 		{
 			if constexpr (size<N>()) {
@@ -202,7 +202,7 @@ namespace common_platform {
 		}
 
 		template <std::size_t N>
-		requires (N < sizeof...(types) && (bool(size<N>()) && not has_fast_path<N>()))
+		requires (N < sizeof...(Ts) and (bool(size<N>()) and not has_fast_path<N>()))
 		constexpr auto set(const type<N> value) noexcept
 		{
 			constexpr auto d_bit = offset<N>();
@@ -242,7 +242,7 @@ namespace common_platform {
 		}
 
 		template <typename T>
-		requires (type_index<T> not_eq sizeof...(types))
+		requires (type_index<T> not_eq sizeof...(Ts))
 		constexpr auto set(const T value) noexcept
 		{
 			set<type_index<T>>(value);
@@ -258,7 +258,7 @@ namespace common_platform {
 		// undefined behavior for some possible values in almost all cases. Prefer fixed type 
 		// enumerations which do not have this pitfall.
 		template <std::size_t N>
-		requires (N < sizeof...(types) && (not size<N>() || has_fast_path<N>()))
+		requires (N < sizeof...(Ts) and (not size<N>() or has_fast_path<N>()))
 		[[nodiscard]] constexpr auto get() const noexcept
 		{
 			if constexpr (size<N>()) {
@@ -283,7 +283,7 @@ namespace common_platform {
 		}
 
 		template <std::size_t N>
-		requires (N < sizeof...(types) && (bool(size<N>()) && not has_fast_path<N>()))
+		requires (N < sizeof...(Ts) and (bool(size<N>()) and not has_fast_path<N>()))
 		[[nodiscard]] constexpr auto get() const noexcept
 		{
 			constexpr auto s_bit = offset<N>();
@@ -324,13 +324,13 @@ namespace common_platform {
 		}
 
 		template <typename T>
-		requires (type_index<T> not_eq sizeof...(types))
+		requires (type_index<T> not_eq sizeof...(Ts))
 		[[nodiscard]] constexpr auto get() const noexcept
 		{
 			return get<type_index<T>>();
 		}
 		template <typename T = type<0>>
-		requires (sizeof...(types) == 1 and std::same_as<T, type<0>>)
+		requires (sizeof...(Ts) == 1 and std::same_as<T, type<0>>)
 		[[nodiscard]] constexpr operator T() const noexcept
 		{
 			return get<0>();
@@ -350,11 +350,11 @@ namespace common_platform {
 		template <typename T, std::size_t N>
 		[[nodiscard]] static constexpr auto contained_in_idx(const std::size_t byte) noexcept
 		{
-			if constexpr (not std::has_unique_object_representations_v<T> || std::endian::native not_eq std::endian::little) return false;
-			if (byte > bytes || bytes - byte < sizeof(T)) return false;
+			if constexpr (not std::has_unique_object_representations_v<T> or std::endian::native not_eq std::endian::little) return false;
+			if (byte > bytes or bytes - byte < sizeof(T)) return false;
 			auto first_t = byte * std::numeric_limits<unsigned char>::digits;
 			auto last_t = first_t + std::numeric_limits<T>::digits;
-			return first_t <= offset<N>() && last_t >= offset<N>() + size<N>();
+			return first_t <= offset<N>() and last_t >= offset<N>() + size<N>();
 		}
 
 		template <std::size_t N, typename T, bool aligned>
@@ -372,10 +372,10 @@ namespace common_platform {
 			}
 		}
 
-		template <std::size_t N, bool aligned, typename... ts, std::size_t... seq>
-		[[nodiscard]] static consteval auto first_type(const std::index_sequence<seq...>&, const std::tuple<ts...>&) noexcept
+		template <std::size_t N, bool aligned, typename... Ts, std::size_t... Is>
+		[[nodiscard]] static consteval auto first_type(const std::index_sequence<Is...>&, const std::tuple<Ts...>&) noexcept
 		{
-			return std::min(std::initializer_list<std::size_t>{(native_offset<N, ts, aligned>() not_eq bytes ? seq : sizeof...(seq))...});
+			return std::min(std::initializer_list<std::size_t>{(native_offset<N, Ts, aligned>() not_eq bytes ? Is : sizeof...(Is))...});
 		}
 
 		template <std::size_t N>
@@ -410,38 +410,38 @@ namespace common_platform {
 		}
 	};
 
-	template <typename... types>
-	[[nodiscard]] constexpr auto operator<=>(const bitfield<types...>& a, const bitfield<types...>& b) noexcept
+	template <typename... Ts>
+	[[nodiscard]] constexpr auto operator<=>(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
 	{
-		return[]<std::size_t... S>(const std::index_sequence<S...>&, const auto & l, const auto & r)
+		return[]<std::size_t... Is>(const std::index_sequence<Is...>&, const auto& l, const auto& r)
 		{
 			auto o = std::strong_ordering::equal;
-			((o = o == std::strong_ordering::equal ? l.template get<S>() <=> r.template get<S>() : o), ...);
+			((o = o == std::strong_ordering::equal ? l.template get<Is>() <=> r.template get<Is>() : o), ...);
 			return o;
-		}(std::index_sequence_for<types...>(), a, b);
+		}(std::index_sequence_for<Ts...>(), a, b);
 	}
 
-	template <typename... types>
-	[[nodiscard]] constexpr auto operator==(const bitfield<types...>& a, const bitfield<types...>& b) noexcept
+	template <typename... Ts>
+	[[nodiscard]] constexpr auto operator==(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
 	{
 		return a <=> b == std::strong_ordering::equal;
 	}
 }
 namespace std {
-	template <typename... types>
-	struct tuple_size<common_platform::bitfield<types...>> final
-		: std::integral_constant<std::size_t, sizeof...(types)> {};
+	template <typename... Ts>
+	struct tuple_size<common_platform::bitfield<Ts...>> final
+		: std::integral_constant<std::size_t, sizeof...(Ts)> {};
 
-	template <std::size_t I, typename... types>
-	struct tuple_element<I, common_platform::bitfield<types...>> final
+	template <std::size_t I, typename... Ts>
+	struct tuple_element<I, common_platform::bitfield<Ts...>> final
 	{
-		using type = std::remove_cv_t<decltype(std::tuple_element_t<I, std::tuple<types...>>::value)>;
+		using type = std::remove_cv_t<decltype(std::tuple_element_t<I, std::tuple<Ts...>>::value)>;
 	};
 
-	template <typename... types>
-	struct hash<common_platform::bitfield<types...>> final { [[nodiscard]] constexpr auto operator()(const common_platform::bitfield<types...>& b) const noexcept
+	template <typename... Ts>
+	struct hash<common_platform::bitfield<Ts...>> final { [[nodiscard]] constexpr auto operator()(const common_platform::bitfield<Ts...>& b) const noexcept
 	{
-		constexpr auto bit_size = (types::value + ... + 0);
+		constexpr auto bit_size = (Ts::value + ... + 0);
 		constexpr auto trailing_bits = bit_size % std::numeric_limits<unsigned char>::digits;
 		auto first = b.s.begin();
 		auto last = b.s.end() - bool(trailing_bits);
