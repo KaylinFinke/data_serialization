@@ -54,13 +54,32 @@ namespace data_serialization {
 			else return *t;
 		}
 
+		template <typename F, typename Args, typename Tuple>
+		struct noexcept_test final : std::false_type {};
 
+		template <typename F, typename Args, typename... Ts>
+		struct noexcept_test<F, Args, std::tuple<Ts...>> final
+		{
+			static constexpr auto value = [] <std::size_t... Is>(const std::index_sequence<Is...>&) {
+				std::tuple<Ts*...> ptrs;
 
+				using A = std::remove_pointer_t<std::tuple_element_t<sizeof...(Ts) - 1, decltype(ptrs)>>;
+
+				using Tuple = std::conditional_t<std::is_unbounded_array_v<A>,
+					decltype(std::tuple_cat(std::declval<Args>(), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(std::declval<std::size_t&>()))),
+					decltype(std::tuple_cat(std::declval<Args>(), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...)))>;
+
+				return noexcept(std::apply(std::declval<F&>(), std::declval<Tuple>()));
+			}(std::index_sequence_for<Ts...>());
+		};
+
+		template <typename F, typename Args, typename... Ts>
+		inline constexpr auto noexcept_test_v = noexcept_test<F, Args, std::tuple<Ts...>>::value;
 
 		template <typename F, typename Args, typename... Ts, std::size_t... Is>
 		requires common_platform::is_transparently_serializable_v<Ts...>
 		and ((not std::is_unbounded_array_v<std::tuple_element_t<Is, std::tuple<Ts...>>> or 1 + Is == sizeof...(Ts)) and ... and true)
-		[[nodiscard]] decltype(auto) invoke(const std::index_sequence<Is...>&, F&& f, Args&& args, std::byte* data, std::size_t size)
+		[[nodiscard]] decltype(auto) invoke(const std::index_sequence<Is...>&, F&& f, Args&& args, std::byte* data, std::size_t size) noexcept(noexcept_test_v<F, Args, Ts...>)
 		{
 			if constexpr (sizeof...(Ts)) {
 
@@ -69,7 +88,7 @@ namespace data_serialization {
 				using A = std::remove_pointer_t<std::tuple_element_t<sizeof...(Ts) - 1, decltype(ptrs)>>;
 
 				using Tuple = std::conditional_t<std::is_unbounded_array_v<A>,
-					decltype(std::tuple_cat(std::forward<Args>(args), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(std::declval<std::size_t>()))),
+					decltype(std::tuple_cat(std::forward<Args>(args), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(std::declval<std::size_t&>()))),
 					decltype(std::tuple_cat(std::forward<Args>(args), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...)))>;
 
 				using R = std::decay_t<decltype(std::apply(std::forward<F>(f), std::declval<Tuple>()))>;
