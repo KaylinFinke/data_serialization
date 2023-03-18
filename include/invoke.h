@@ -73,18 +73,11 @@ namespace data_serialization {
 					decltype(std::tuple_cat(std::forward<Args>(args), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...)))>;
 
 				using R = std::decay_t<decltype(std::apply(std::forward<F>(f), std::declval<Tuple>()))>;
-				alignas(Ts...) std::byte temp[required_size<Ts...>()];
-				
-				if (sizeof(temp) > size) [[unlikely]] {
-					std::memcpy(temp, data, size);
-					std::memset(temp + size, 0, (sizeof(temp) - size));
-					size = sizeof(temp);
-					data = temp;
-				}
+
 				auto remaining = size;
 				((std::get<Is>(ptrs) = unpack_element<Ts>(data, remaining)), ...);
 				if constexpr (std::is_unbounded_array_v<A>) {
-					auto n = (size - sizeof(temp)) / sizeof(std::remove_extent_t<A>);
+					auto n = (size - required_size<Ts...>()) / sizeof(std::remove_extent_t<A>);
 					if constexpr (std::is_void_v<R>) std::apply(std::forward<F>(f), std::tuple_cat(std::forward<Args>(args), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(n)));
 					else return std::apply(std::forward<F>(f), std::tuple_cat(std::forward<Args>(args), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(n)));
 				} else {
@@ -163,6 +156,21 @@ namespace data_serialization {
 
 		template <typename F, common_platform::detail::reflectable_class T, typename Args = std::tuple<>>
 		inline constexpr auto is_unpack_invocable_flex_v = is_unpack_invocable_flex<F, T, Args>::value;
+
+		template <typename... Ts>
+		requires (common_platform::is_transparently_serializable_v<Ts...>
+		and common_platform::is_common_platform)
+		[[nodiscard]] decltype(auto) invoke(auto&& f, auto&& args, std::byte* data, std::size_t size)
+		{
+			alignas(Ts...) std::byte temp[required_size<Ts...>()];
+			using F = std::remove_reference_t<decltype(f)>;
+			using Args = std::remove_reference_t<decltype(args)>;
+
+			std::memcpy(temp, data, size);
+			std::memset(temp + size, 0, (sizeof(temp) - size));
+			return detail::invoke<F, Args, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::forward<Args>(args), temp, sizeof(temp));
+		}
+
 	}
 	template <typename... Ts>
 	requires (common_platform::is_transparently_serializable_v<Ts...>
@@ -170,7 +178,10 @@ namespace data_serialization {
 	[[nodiscard]] decltype(auto) invoke(auto&& f, std::byte* data, std::size_t size)
 	{
 		using F = std::remove_reference_t<decltype(f)>;
-		return detail::invoke<F, std::tuple<>, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::make_tuple(), data, size);
+		if (size >= detail::required_size<Ts...>()) [[likely]]
+			return detail::invoke<F, std::tuple<>, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::make_tuple(), data, size);
+		else
+			return detail::invoke<Ts...>(std::forward<F>(f), std::make_tuple(), data, size);
 	}
 	template <typename... Ts>
 	requires (common_platform::is_transparently_serializable_v<Ts...>
@@ -179,12 +190,16 @@ namespace data_serialization {
 	{
 		using F = std::remove_reference_t<decltype(f)>;
 		using Args = std::remove_reference_t<decltype(args)>;
-		return detail::invoke<F, Args, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::forward<Args>(args), data, size);
+		if (size >= detail::required_size<Ts...>()) [[likely]]
+			return detail::invoke<F, Args, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::forward<Args>(args), data, size);
+		else
+			return detail::invoke<Ts...>(std::forward<F>(f), std::forward<Args>(args), data, size);
 	}
 
 	template <typename... Ts, std::size_t N>
 	requires (common_platform::is_transparently_serializable_v<Ts...>
-	and common_platform::is_common_platform)
+	and common_platform::is_common_platform
+	and N >= detail::required_size<Ts...>())
 	[[nodiscard]] decltype(auto) invoke(auto&& f, std::byte(&data)[N])
 	{
 		using F = std::remove_reference_t<decltype(f)>;
@@ -193,7 +208,8 @@ namespace data_serialization {
 
 	template <typename... Ts, std::size_t N>
 	requires (common_platform::is_transparently_serializable_v<Ts...>
-	and common_platform::is_common_platform)
+	and common_platform::is_common_platform
+	and N >= detail::required_size<Ts...>())
 	[[nodiscard]] decltype(auto) invoke(auto&& f, auto&& args, std::byte(&data)[N])
 	{
 		using F = std::remove_reference_t<decltype(f)>;
