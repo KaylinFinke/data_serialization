@@ -15,7 +15,6 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <variant>
 
 namespace common_platform {
 	namespace detail {
@@ -220,23 +219,24 @@ namespace common_platform {
 		//at in or following a variable length array can be no stricter aligned than
 		//the size of smallest element of a variable length array or item in the pack.
 		template <std::size_t N, typename Tuple>
-		consteval auto transparently_serializable_pack(std::same_as<bool> auto& result, std::same_as<std::variant<std::size_t, int>> auto& max_alignment_or_offset) noexcept
+		consteval auto transparently_serializable_pack(std::same_as<bool> auto& result, std::size_t& offset, int& align, bool& holds_int) noexcept
 		{
 			using E = std::tuple_element_t<N, Tuple>;
 			using T = std::conditional_t<std::is_unbounded_array_v<E>, std::remove_extent_t<E>, E>;
 
 			if constexpr (constexpr auto element_alignment = is_transparently_serializable_element<T>()) {
-				if (std::holds_alternative<int>(max_alignment_or_offset)) {
-					if (std::countr_zero(element_alignment) > std::get<int>(max_alignment_or_offset))
+				if (holds_int) {
+					if (std::countr_zero(element_alignment) > align)
 						result = false;
-					max_alignment_or_offset = std::min(std::get<int>(max_alignment_or_offset), std::countr_zero(sizeof(T)));
+					align = std::min(align, std::countr_zero(sizeof(T)));
 				} else {
-					if (std::countr_zero(element_alignment) > std::countr_zero(std::get<std::size_t>(max_alignment_or_offset)))
+					if (std::countr_zero(element_alignment) > std::countr_zero(offset))
 						result = false;
-					if (std::is_unbounded_array_v<E>)
-						max_alignment_or_offset = std::min(std::countr_zero(std::get<std::size_t>(max_alignment_or_offset)), std::countr_zero(sizeof(T)));
-					else
-						std::get<std::size_t>(max_alignment_or_offset) += sizeof(T);
+					if (std::is_unbounded_array_v<E>) {
+						align = std::min(std::countr_zero(offset), std::countr_zero(sizeof(T)));
+						holds_int = true;
+					} else
+						offset += sizeof(T);
 				}
 			} else
 				result = false;
@@ -246,8 +246,10 @@ namespace common_platform {
 		[[nodiscard]] consteval auto transparently_serializable_pack(const std::index_sequence<Is...>&) noexcept
 		{
 			auto result = true;
-			std::variant<std::size_t, int> max_alignment_or_offset;
-			(transparently_serializable_pack<Is, Tuple>(result, max_alignment_or_offset), ...);
+			auto holds_int = false;
+			auto offset = std::size_t{};
+			auto align = 0;
+			(transparently_serializable_pack<Is, Tuple>(result, offset, align, holds_int), ...);
 			return result;
 		}
 	}

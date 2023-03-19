@@ -386,10 +386,10 @@ namespace common_platform {
 			}
 		}
 
-		template <std::size_t N, bool aligned, typename... Ts, std::size_t... Is>
-		[[nodiscard]] static consteval auto first_type(const std::index_sequence<Is...>&, const std::tuple<Ts...>&) noexcept
+		template <std::size_t N, bool aligned, typename... TTs, std::size_t... Is>
+		[[nodiscard]] static consteval auto first_type(const std::index_sequence<Is...>&, const std::tuple<TTs...>&) noexcept
 		{
-			return std::min(std::initializer_list<std::size_t>{(native_offset<N, Ts, aligned>() not_eq bytes ? Is : sizeof...(Is))...});
+			return std::min(std::initializer_list<std::size_t>{(native_offset<N, TTs, aligned>() not_eq bytes ? Is : sizeof...(Is))...});
 		}
 
 		template <std::size_t N>

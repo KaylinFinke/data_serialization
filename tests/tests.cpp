@@ -4,6 +4,7 @@
 #include "transparently_serializable.h"
 #include "invoke.h"
 #include "apply.h"
+#include "interchange_float.h"
 
 #include <algorithm>
 #include <cassert>
@@ -145,6 +146,7 @@ static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const cha
 static_assert(std::same_as<decltype(type_conversion::strict_alias_cast<const char&>(std::declval<const int&>())), const char&>);
 
 #include <iostream>
+#include <cstring>
 
 template <typename... Ts>
 auto test() noexcept
@@ -199,6 +201,25 @@ int main()
 	}; //std::uint32_t and 0+ floats.
 	std::memcpy(buf, "flex array!", sizeof(buf));
 	data_serialization::apply<foobar>(fun2, buf, sizeof(buf));
+	std::uint32_t ifloat = {};
+	float ffloat;
+
+	while (ifloat < 0xFFFFFFFF)
+	{
+		ffloat = data_serialization::to_binary32(ifloat);
+		auto i = std::bit_cast<std::uint32_t>(ffloat);
+		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or i == ifloat);
+		auto ii = data_serialization::from_binary32(ffloat);
+		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ii == ifloat);
+		++ifloat;
+	}
+	{
+		ffloat = data_serialization::to_binary32(ifloat);
+		auto i = std::bit_cast<std::uint32_t>(ffloat);
+		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or i == ifloat);
+		auto ii = data_serialization::from_binary32(ffloat);
+		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ii == ifloat);
+	}
 
 	return 0;
 }

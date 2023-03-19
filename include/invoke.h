@@ -185,8 +185,10 @@ namespace data_serialization {
 			using F = std::remove_reference_t<decltype(f)>;
 			using Args = std::remove_reference_t<decltype(args)>;
 
-			std::memcpy(temp, data, size);
-			std::memset(temp + size, 0, (sizeof(temp) - size));
+			if (size < sizeof(temp)) [[likely]]
+				std::memcpy(temp, data, size);
+			if (size < sizeof(temp)) [[likely]]
+				std::memset(temp + size, 0, (sizeof(temp) - size));
 			return detail::invoke<F, Args, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::forward<Args>(args), temp, sizeof(temp));
 		}
 
