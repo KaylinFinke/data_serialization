@@ -127,7 +127,7 @@ namespace data_serialization {
 					t = e_mask;
 				else if (!t);
 				else if (e > -b + 1) {
-					t = t & m_mask;
+					t &= m_mask;
 					t |= (e + b) << e_shift;
 				} else
 					t >>= std::abs(e + b - 2);
