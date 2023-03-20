@@ -32,6 +32,33 @@ namespace data_serialization {
 			requires (std::numeric_limits<I>::digits == M + E and std::unsigned_integral<I>)
 			or (std::numeric_limits<I>::digits + 1 == M + E and std::signed_integral<I>);
 		};
+
+		template <int M, std::unsigned_integral U>
+		constexpr auto round_to_even(U& t, int& e) noexcept
+		{
+			constexpr auto i_bit = U{ U{1} << (M - 1) };
+			constexpr auto m_mask = U{ i_bit - 1 };
+			constexpr auto m_max = i_bit | m_mask;
+
+			if (auto over = std::bit_width(t) - M; over > 0) [[unlikely]] {
+				auto o_mask = U((U{ 1 } << over) - 1);
+				auto half = std::bit_floor(o_mask);
+				auto is_odd = bool(std::bit_ceil(o_mask) & t);
+				auto frac = (t & o_mask);
+
+				if ((frac > half) or (frac == half and is_odd)) {
+					if ((t >> over) == m_max) {
+						t = i_bit;
+						++e;
+					}
+					else
+						t = (t >> over) + 1;
+				}
+				else
+					t >>= over;
+				e += over;
+			}
+		}
 	}
 	/*Interprets an integral value as a binary floating point representation.
 	 converting the value to as close a representation as possible. If the
@@ -101,7 +128,8 @@ namespace data_serialization {
 	 converted to a qNaN for interchange as specified by IEEE754-2008. If the floating
 	 point value has a magnitude exceeding the interchange format the value is encoded
 	 as +/-INF. If the floating point value cannot be represented exactly in the
-	 interchange format, it is rounded to the current environment rounding method.*/
+	 interchange format, it is rounded to the current environment rounding method. If the
+	 result is an integral number that can't be represented in M bits, it's rounded to even.*/
 	template <std::integral T, int M, int E, std::floating_point F>
 	requires (std::numeric_limits<T>::digits >= (M + E) - std::is_signed_v<T>)
 	T from_float(const F& f) noexcept
@@ -109,23 +137,28 @@ namespace data_serialization {
 		if constexpr (detail::native_float<T, F, M, E>)
 			return std::bit_cast<T>(f);
 		else {
-			T t{};
-			constexpr auto i_bit = T{ T{1} << (M - 1) };
-			constexpr auto q_bit = T{ i_bit >> 1 };
-			constexpr auto m_mask = T{ i_bit - 1 };
+			using U = std::make_unsigned_t<T>;
+			U t{};
+			constexpr auto i_bit = U{ U{1} << (M - 1) };
+			constexpr auto q_bit = U{ i_bit >> 1 };
+			constexpr auto m_mask = U{ i_bit - 1 };
 			constexpr auto e_shift = (M - 1);
-			constexpr auto e_mask = T{ T{ (1 << E) - 1 } << e_shift };
-			constexpr auto s_mask = T{ T{1} << (M + E - 1) };
+			constexpr auto e_mask = U{ U{ (1 << E) - 1 } << e_shift };
+			constexpr auto s_mask = U{ U{1} << (M + E - 1) };
 			constexpr auto b = ((1 << E) - 1) >> 1;
 			constexpr auto e_min = -b - M + 1;
 			constexpr auto e_max = b + 1;
 
 			if (std::isfinite(f)) {
 				auto e = int{};
-				t = T(std::abs(std::rint(std::ldexp(std::frexp(f, &e), M))));
-				if (e < e_min or e > e_max)
+				t = U(std::abs(std::rint(std::ldexp(std::frexp(f, &e), M))));
+				
+				detail::round_to_even<M>(t, e);
+
+				if (e > e_max)
 					t = e_mask;
-				else if (!t);
+				else if (!t or e < e_min)
+					t = 0;
 				else if (e > -b + 1) {
 					t &= m_mask;
 					t |= (e + b) << e_shift;
@@ -135,7 +168,7 @@ namespace data_serialization {
 				t = e_mask;
 			if (std::isnan(f)) t |= q_bit;
 			if (std::signbit(f)) t |= s_mask;
-			return t;
+			return static_cast<T>(t);
 		}
 	}
 
