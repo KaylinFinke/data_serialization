@@ -3,6 +3,7 @@
 #if defined(CE0B1D5104534E44A2E29836848BB48C)
 
 #include "strict_alias.h"
+#include "interchange_float.h"
 
 #include <algorithm>
 #include <array>
@@ -49,8 +50,46 @@ namespace common_platform {
 			value_type i;
 		};
 	}
+	template <std::floating_point F, int E, int M, std::integral T>
+	requires (std::numeric_limits<T>::digits >= (M + E) - std::is_signed_v<T>)
+	struct float_constant : std::integral_constant<T, M + E>
+	{
+		using float_type = F;
+		static constexpr int m_bits = M;
+		static constexpr int e_bits = E;
+	};
+
+	namespace detail {
+
+		template <typename T, typename = void>
+		struct is_float_bitfield_element : std::false_type {};
+
+
+		template <typename T>
+		struct is_float_bitfield_element <T, std::void_t<decltype(std::declval<float_constant<typename T::float_type, T::m_bits, T::e_bits, std::remove_cv_t<decltype(T::value)>>>())>>
+		{
+			static constexpr bool value = std::same_as<T, float_constant<typename T::float_type, T::m_bits, T::e_bits, std::remove_cv_t<decltype(T::value)>>>;
+		};
+
+		template <typename T>
+		inline constexpr auto is_float_bitfield_element_v = is_float_bitfield_element<T>::value;
+
+		template <typename T, typename = void>
+		struct is_integral_bitfield_element : std::false_type {};
+
+
+		template <typename T>
+		struct is_integral_bitfield_element <T, std::void_t<decltype(std::declval<std::integral_constant<std::remove_cv_t<decltype(T::value)>, T::value>>())>>
+		{
+			static constexpr bool value = std::same_as<std::integral_constant<std::remove_cv_t<decltype(T::value)>, T::value>, T>;
+		};
+
+		template <typename T>
+		inline constexpr auto is_integral_bitfield_element_v = is_integral_bitfield_element<T>::value;
+	}
+
 	template <typename... Ts>
-	requires (std::same_as<std::integral_constant<std::remove_cv_t<decltype(Ts::value)>, Ts::value>, Ts> and ...) and
+	requires ((detail::is_integral_bitfield_element_v<Ts> or detail::is_float_bitfield_element_v<Ts>) and ...) and
 	(std::disjunction_v<std::is_integral<decltype(Ts::value)>, std::is_enum<decltype(Ts::value)>> and ...) and
 	((std::numeric_limits<type_conversion::detail::corresponding_unsigned_type<detail::underlying_integral<decltype(Ts::value)>>>::digits
 	>= static_cast<detail::underlying_integral<decltype(Ts::value)>>(Ts::value)) and ...)
@@ -79,7 +118,16 @@ namespace common_platform {
 		}
 
 		template <std::size_t N>
-		using type = std::remove_cv_t<decltype(std::tuple_element_t<N, tuple>::value)>;
+		using int_type = std::remove_cv_t<decltype(std::tuple_element_t<N, tuple>::value)>;
+
+		template <std::size_t N>
+		static constexpr bool is_float = detail::is_float_bitfield_element_v<std::tuple_element_t<N, tuple>>;
+
+		template <std::size_t N>
+		static constexpr bool is_integral = detail::is_integral_bitfield_element_v<std::tuple_element_t<N, tuple>>;
+
+		template <std::size_t N>
+		using float_type = std::tuple_element_t<N, tuple>::float_type;
 
 		template <std::size_t N>
 		[[nodiscard]] static consteval auto offset() noexcept
@@ -100,7 +148,7 @@ namespace common_platform {
 		template <typename T, std::size_t N>
 		static consteval auto find_index(std::same_as<std::size_t> auto& i, std::same_as<bool> auto& unique) noexcept
 		{
-			if constexpr (std::is_same_v<T, type<N>>) {
+			if constexpr (std::is_same_v<T, int_type<N>>) {
 				unique = i == sizeof...(Ts);
 				i = N;
 			}
@@ -171,10 +219,10 @@ namespace common_platform {
 		//-------------------------------------------------------------------------------------
 		template <std::size_t N>
 		requires (N < sizeof...(Ts) and (not size<N>() or has_fast_path<N>()))
-		constexpr auto set(const type<N> value) noexcept
+		constexpr auto set(const int_type<N> value) noexcept
 		{
 			if constexpr (size<N>()) {
-				using underlying_type = detail::underlying_integral<type<N>>;
+				using underlying_type = detail::underlying_integral<int_type<N>>;
 				using unsigned_type = native_type<N>;
 				constexpr auto word_offset = native_offset<N>() * std::numeric_limits<unsigned char>::digits;
 				constexpr auto l_shift = offset<N>() - word_offset;
@@ -203,7 +251,7 @@ namespace common_platform {
 
 		template <std::size_t N>
 		requires (N < sizeof...(Ts) and (bool(size<N>()) and not has_fast_path<N>()))
-		constexpr auto set(const type<N> value) noexcept
+		constexpr auto set(const int_type<N> value) noexcept
 		{
 			constexpr auto d_bit = offset<N>();
 			constexpr auto f_shift = bit(d_bit);
@@ -215,7 +263,7 @@ namespace common_platform {
 			constexpr auto n_last = [=]() consteval { return n_bits - l_shift; }();
 			constexpr auto last_mask = [=]() consteval { return ~(std::byte{ std::numeric_limits<unsigned char>::max() } << bit(n_last)); }();
 
-			using underlying_type = detail::underlying_integral<type<N>>;
+			using underlying_type = detail::underlying_integral<int_type<N>>;
 			using unsigned_type = std::make_unsigned_t<decltype(+underlying_type())>;
 
 			auto u = static_cast<unsigned_type>(value);
@@ -262,7 +310,7 @@ namespace common_platform {
 		[[nodiscard]] constexpr auto get() const noexcept
 		{
 			if constexpr (size<N>()) {
-				using underlying_type = detail::underlying_integral<type<N>>;
+				using underlying_type = detail::underlying_integral<int_type<N>>;
 				using unsigned_type = native_type<N>;
 				constexpr auto word_offset = native_offset<N>() * std::numeric_limits<unsigned char>::digits;
 				constexpr auto r_shift = offset<N>() - word_offset;
@@ -277,9 +325,9 @@ namespace common_platform {
 					v >>= r_shift;
 					v &= std::numeric_limits<unsigned_type>::max() >> (std::numeric_limits<unsigned_type>::digits - size<N>());
 				}
-				return static_cast<type<N>>(v);
+				return static_cast<int_type<N>>(v);
 			} else
-				return type<N>{};
+				return int_type<N>{};
 		}
 
 		template <std::size_t N>
@@ -294,7 +342,7 @@ namespace common_platform {
 			constexpr auto l_shift = [=]() consteval { return n_first + n_bytes * std::numeric_limits<unsigned char>::digits; }();
 			constexpr auto n_last = [=]() consteval { return n_bits - l_shift; }();
 
-			using underlying_type = detail::underlying_integral<type<N>>;
+			using underlying_type = detail::underlying_integral<int_type<N>>;
 			using unsigned_type = std::make_unsigned_t<decltype(+underlying_type())>;
 			using alias_type = std::conditional_t<std::signed_integral<underlying_type>, std::make_signed_t<unsigned_type>, unsigned_type>;
 
@@ -318,9 +366,9 @@ namespace common_platform {
 				v |= std::to_integer<unsigned_type>(*s_first++) << (l_shift + s_adjust);
 
 			if constexpr (std::signed_integral<alias_type>)
-				return static_cast<type<N>>(static_cast<alias_type>(v) >> s_adjust);
+				return static_cast<int_type<N>>(static_cast<alias_type>(v) >> s_adjust);
 			else
-				return static_cast<type<N>>(v & (std::numeric_limits<unsigned_type>::max() >> hi_bits));
+				return static_cast<int_type<N>>(v & (std::numeric_limits<unsigned_type>::max() >> hi_bits));
 		}
 
 		template <typename T>
@@ -329,23 +377,25 @@ namespace common_platform {
 		{
 			return get<type_index<T>>();
 		}
-		template <typename T = type<0>>
-		requires (sizeof...(Ts) == 1 and std::same_as<T, type<0>>)
+		template <typename T = int_type<0>>
+		requires (sizeof...(Ts) == 1 and std::same_as<T, int_type<0>>)
 		[[nodiscard]] constexpr operator T() const noexcept
 		{
 			return get<0>();
 		}
 
-		constexpr auto operator=(type<0>&& t) noexcept
+		constexpr auto operator=(int_type<0>&& t) noexcept
 		{
 			static_assert(sizeof...(Ts) == 1);
+			static_assert(is_integral<0>);
 			set(t);
 			return t;
 		}
 
-		constexpr auto operator=(const type<0>& t) noexcept
+		constexpr auto operator=(const int_type<0>& t) noexcept
 		{
 			static_assert(sizeof...(Ts) == 1);
+			static_assert(is_integral<0>);
 			set(t);
 			return t;
 		}
