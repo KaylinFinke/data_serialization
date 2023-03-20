@@ -33,30 +33,30 @@ namespace data_serialization {
 			or (std::numeric_limits<I>::digits + 1 == M + E and std::signed_integral<I>);
 		};
 
-		template <int M, std::unsigned_integral U>
-		constexpr auto round_to_even(U& t, int& e) noexcept
+		template <int M, std::integral T>
+		constexpr auto round_to_even(T& t, int& e) noexcept
 		{
-			constexpr auto i_bit = U{ U{1} << (M - 1) };
-			constexpr auto m_mask = U{ i_bit - 1 };
+			constexpr auto i_bit = T{ T{1} << (M - 1) };
+			constexpr auto m_mask = T{ i_bit - 1 };
 			constexpr auto m_max = i_bit | m_mask;
 
-			if (auto over = std::bit_width(t) - M; over > 0) [[unlikely]] {
-				auto o_mask = U((U{ 1 } << over) - 1);
-				auto half = std::bit_floor(o_mask);
-				auto is_odd = bool(std::bit_ceil(o_mask) & t);
-				auto frac = (t & o_mask);
+			if (auto exceeds_m = std::bit_width(static_cast<std::make_unsigned_t<T>>(t)) - M; exceeds_m > 0) [[unlikely]] {
+				auto odd_bit = T{ 1 } << exceeds_m;
+				auto half = odd_bit >> 1;
+				auto is_odd = bool(odd_bit & t);
+				auto frac = (t & (odd_bit - 1));
 
 				if ((frac > half) or (frac == half and is_odd)) {
-					if ((t >> over) == m_max) {
+					if ((t >> exceeds_m) == m_max) {
 						t = i_bit;
 						++e;
 					}
 					else
-						t = (t >> over) + 1;
+						t = (t >> exceeds_m) + 1;
 				}
 				else
-					t >>= over;
-				e += over;
+					t >>= exceeds_m;
+				e += exceeds_m;
 			}
 		}
 	}
@@ -137,21 +137,20 @@ namespace data_serialization {
 		if constexpr (detail::native_float<T, F, M, E>)
 			return std::bit_cast<T>(f);
 		else {
-			using U = std::make_unsigned_t<T>;
-			U t{};
-			constexpr auto i_bit = U{ U{1} << (M - 1) };
-			constexpr auto q_bit = U{ i_bit >> 1 };
-			constexpr auto m_mask = U{ i_bit - 1 };
+			T t{};
+			constexpr auto i_bit = T{ T{1} << (M - 1) };
+			constexpr auto q_bit = T{ i_bit >> 1 };
+			constexpr auto m_mask = T{ i_bit - 1 };
 			constexpr auto e_shift = (M - 1);
-			constexpr auto e_mask = U{ U{ (1 << E) - 1 } << e_shift };
-			constexpr auto s_mask = U{ U{1} << (M + E - 1) };
+			constexpr auto e_mask = T{ T{ (1 << E) - 1 } << e_shift };
+			constexpr auto s_mask = T{ T{1} << (M + E - 1) };
 			constexpr auto b = ((1 << E) - 1) >> 1;
 			constexpr auto e_min = -b - M + 1;
 			constexpr auto e_max = b + 1;
 
 			if (std::isfinite(f)) {
 				auto e = int{};
-				t = U(std::abs(std::rint(std::ldexp(std::frexp(f, &e), M))));
+				t = T(std::abs(std::rint(std::ldexp(std::frexp(f, &e), M))));
 				
 				detail::round_to_even<M>(t, e);
 
