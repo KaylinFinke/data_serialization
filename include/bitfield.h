@@ -526,6 +526,7 @@ namespace common_platform {
 	};
 
 	template <typename... Ts>
+	requires (common_platform::detail::is_integral_bitfield_element_v<Ts> and ...)
 	[[nodiscard]] constexpr auto operator<=>(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
 	{
 		return[]<std::size_t... Is>(const std::index_sequence<Is...>&, const auto& l, const auto& r)
@@ -537,9 +538,29 @@ namespace common_platform {
 	}
 
 	template <typename... Ts>
+	requires (common_platform::detail::is_integral_bitfield_element_v<Ts> and ...)
 	[[nodiscard]] constexpr auto operator==(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
 	{
 		return a <=> b == std::strong_ordering::equal;
+	}
+
+	template <typename... Ts>
+	requires (common_platform::detail::is_float_bitfield_element_v<Ts> or ...)
+	[[nodiscard]] constexpr auto operator<=>(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
+	{
+		return[]<std::size_t... Is>(const std::index_sequence<Is...>&, const auto & l, const auto & r)
+		{
+			auto o = std::partial_ordering::equivalent;
+			((o = o == std::partial_ordering::equivalent ? l.template get<Is>() <=> r.template get<Is>() : o), ...);
+			return o;
+		}(std::index_sequence_for<Ts...>(), a, b);
+	}
+
+	template <typename... Ts>
+	requires (common_platform::detail::is_float_bitfield_element_v<Ts> or ...)
+	[[nodiscard]] constexpr auto operator==(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
+	{
+		return a <=> b == std::partial_ordering::equivalent;
 	}
 }
 namespace std {
