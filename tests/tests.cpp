@@ -164,6 +164,10 @@ auto test() noexcept
 int main()
 {
 	common_platform::bitfield<std::integral_constant<signed, 7>> f{};
+	common_platform::bitfield < common_platform::float_constant<float, 24, 8, std::uint_least32_t>> g{};
+	std::unordered_set<decltype(g)> g_set;
+	g_set.insert(g);
+	assert(g_set.contains(g));
 	f = signed(-5);
 	std::unordered_set<B1> u;
 	u.emplace(B1{});
