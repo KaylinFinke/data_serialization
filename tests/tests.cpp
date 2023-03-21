@@ -56,7 +56,7 @@ static_assert(common_platform::is_common_platform);
 
 static constexpr auto field1 = common_platform::bitfield<std::integral_constant<signed, 7>>{ { {std::byte{0x7B} } } };
 static_assert(field1.get<0>() == -5); //signed fast path rank < int at 0.
-[[maybe_unused]] int x = field1;
+[[maybe_unused]] static int x = field1;
 static_assert(sizeof(field1) == 1);
 static constexpr auto field2 = common_platform::bitfield<std::integral_constant<bool, 1>, std::integral_constant<signed, 7>>{ { { std::byte{0xF6} } } };
 static_assert(field2.get<1>() == -5); //signed fast path rank < int not at 0.
@@ -186,18 +186,18 @@ int main()
 	struct foobar { std::uint32_t a; float b[2]; };
 	alignas(foobar) std::byte buf[sizeof(std::uint32_t) + sizeof(float[2])]{};
 
-	auto fun = [](std::uint32_t u, float(&a)[2]) 
+	auto fun = [](std::uint32_t uu, float(&a)[2]) 
 	{
-		std::cout << u << std::endl;
-		std::ranges::for_each(a, [](auto f) { std::cout << f << std::endl; });
+		std::cout << uu << std::endl;
+		std::ranges::for_each(a, [](auto ff) { std::cout << ff << std::endl; });
 		return 73;
 	}; //std::uint32_t and exactly 2 floats.
 	std::memcpy(buf, "hello world", sizeof(buf));
 	assert(73 == data_serialization::apply<foobar>(fun, buf, sizeof(buf)));
 
-	auto fun2 = [](std::uint32_t u, float p[], std::size_t n) {
-		std::cout << u << std::endl;
-		std::for_each_n(p, n, [](auto f) { std::cout << f << std::endl; });	
+	auto fun2 = [](std::uint32_t uu, float p[], std::size_t n) {
+		std::cout << uu << std::endl;
+		std::for_each_n(p, n, [](auto ff) { std::cout << ff << std::endl; });	
 	}; //std::uint32_t and 0+ floats.
 	std::memcpy(buf, "flex array!", sizeof(buf));
 	data_serialization::apply<foobar>(fun2, buf, sizeof(buf));
@@ -216,7 +216,7 @@ int main()
 		auto ii = data_serialization::from_binary32(ffloat);
 		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ii == ifloat);
 		my_float = ffloat;
-		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ffloat == float(my_float));
+		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or data_serialization::from_binary32(ffloat) == data_serialization::from_binary32(float(my_float)));
 		++ifloat;
 	}
 	{
@@ -226,7 +226,7 @@ int main()
 		auto ii = data_serialization::from_binary32(ffloat);
 		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ii == ifloat);
 		my_float = ffloat;
-		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ffloat == float(my_float));
+		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or data_serialization::from_binary32(ffloat) == data_serialization::from_binary32(float(my_float)));
 	}
 
 	return 0;
