@@ -20,7 +20,7 @@ namespace data_serialization {
 	}
 
 	template <common_platform::detail::reflectable_class T, typename F>
-	requires common_platform::is_common_platform and detail::is_unpack_invocable_v<F, T>
+	requires detail::is_unpack_invocable_v<F, T>
 	[[nodiscard]] decltype(auto) apply(F&& f, std::byte* data, std::size_t size)
 	{
 		using TT = detail::tuple_of_refs<T>;
@@ -28,7 +28,7 @@ namespace data_serialization {
 	}
 
 	template <common_platform::detail::reflectable_class T, typename Args, typename F>
-	requires common_platform::is_common_platform and detail::is_unpack_invocable_v<F, T, Args>
+	requires detail::is_unpack_invocable_v<F, T, Args>
 	[[nodiscard]] decltype(auto) apply(F&& f, Args&& args, std::byte* data, std::size_t size)
 	{
 		using TT = detail::tuple_of_refs<T>;
@@ -36,7 +36,7 @@ namespace data_serialization {
 	}
 
 	template <common_platform::detail::reflectable_class T, typename F>
-	requires common_platform::is_common_platform and detail::is_unpack_invocable_flex_v<F, T>
+	requires detail::is_unpack_invocable_flex_v<F, T>
 	[[nodiscard]] decltype(auto) apply(F&& f, std::byte* data, std::size_t size)
 	{
 		using TT = detail::tuple_of_refs_flex<T>;
@@ -44,7 +44,7 @@ namespace data_serialization {
 	}
 
 	template <common_platform::detail::reflectable_class T, typename Args, typename F>
-	requires common_platform::is_common_platform and detail::is_unpack_invocable_flex_v<F, T, Args>
+	requires detail::is_unpack_invocable_flex_v<F, T, Args>
 	[[nodiscard]] decltype(auto) apply(F&& f, Args&& args, std::byte* data, std::size_t size)
 	{
 		using TT = detail::tuple_of_refs_flex<T>;

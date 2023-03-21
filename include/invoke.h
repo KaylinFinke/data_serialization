@@ -177,8 +177,7 @@ namespace data_serialization {
 		inline constexpr auto is_unpack_invocable_flex_v = is_unpack_invocable_flex<F, T, Args>::value;
 
 		template <typename... Ts>
-		requires (common_platform::is_transparently_serializable_v<Ts...>
-		and common_platform::is_common_platform)
+		requires common_platform::is_transparently_serializable_v<Ts...>
 		[[nodiscard]] decltype(auto) invoke(auto&& f, auto&& args, std::byte* data, std::size_t size)
 		{
 			alignas(Ts...) std::byte temp[required_size<Ts...>()];
@@ -194,8 +193,7 @@ namespace data_serialization {
 
 	}
 	template <typename... Ts>
-	requires (common_platform::is_transparently_serializable_v<Ts...>
-	and common_platform::is_common_platform)
+	requires common_platform::is_transparently_serializable_v<Ts...>
 	[[nodiscard]] decltype(auto) invoke(auto&& f, std::byte* data, std::size_t size)
 	{
 		using F = std::remove_reference_t<decltype(f)>;
@@ -205,8 +203,7 @@ namespace data_serialization {
 			return detail::invoke<Ts...>(std::forward<F>(f), std::make_tuple(), data, size);
 	}
 	template <typename... Ts>
-	requires (common_platform::is_transparently_serializable_v<Ts...>
-	and common_platform::is_common_platform)
+	requires common_platform::is_transparently_serializable_v<Ts...>
 	[[nodiscard]] decltype(auto) invoke(auto&& f, auto&& args, std::byte* data, std::size_t size)
 	{
 		using F = std::remove_reference_t<decltype(f)>;
@@ -219,7 +216,6 @@ namespace data_serialization {
 
 	template <typename... Ts, std::size_t N>
 	requires (common_platform::is_transparently_serializable_v<Ts...>
-	and common_platform::is_common_platform
 	and N >= detail::required_size<Ts...>())
 	[[nodiscard]] decltype(auto) invoke(auto&& f, std::byte(&data)[N])
 	{
@@ -229,7 +225,6 @@ namespace data_serialization {
 
 	template <typename... Ts, std::size_t N>
 	requires (common_platform::is_transparently_serializable_v<Ts...>
-	and common_platform::is_common_platform
 	and N >= detail::required_size<Ts...>())
 	[[nodiscard]] decltype(auto) invoke(auto&& f, auto&& args, std::byte(&data)[N])
 	{

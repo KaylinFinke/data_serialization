@@ -204,6 +204,10 @@ int main()
 	std::uint32_t ifloat = {};
 	float ffloat;
 
+	common_platform::bitfield< common_platform::float_constant<float, 24, 8, std::uint_least32_t>> my_float{};
+	static_assert(common_platform::detail::is_float_bitfield_element_v<common_platform::float_constant<float, 24, 8, std::uint_least32_t>>);
+	assert(0.0f == float(my_float));
+
 	while (ifloat < 0xFFFFFFFF)
 	{
 		ffloat = data_serialization::to_binary32(ifloat);
@@ -211,6 +215,8 @@ int main()
 		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or i == ifloat);
 		auto ii = data_serialization::from_binary32(ffloat);
 		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ii == ifloat);
+		my_float = ffloat;
+		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ffloat == float(my_float));
 		++ifloat;
 	}
 	{
@@ -219,6 +225,8 @@ int main()
 		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or i == ifloat);
 		auto ii = data_serialization::from_binary32(ffloat);
 		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ii == ifloat);
+		my_float = ffloat;
+		assert(((ifloat & 0x7FFF'FFFF) > 0x7F'FFFF) or ffloat == float(my_float));
 	}
 
 	return 0;
