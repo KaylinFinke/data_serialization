@@ -197,6 +197,7 @@ int main()
 		return 73;
 	}; //std::uint32_t and exactly 2 floats.
 	std::memcpy(buf, "hello world", sizeof(buf));
+	static_assert(data_serialization::apply_size_v<foobar, decltype(fun)> == 12);
 	assert(73 == data_serialization::apply<foobar>(fun, buf, sizeof(buf)));
 
 	auto fun2 = [](std::uint32_t uu, float p[], std::size_t n) {
@@ -204,6 +205,7 @@ int main()
 		std::for_each_n(p, n, [](auto ff) { std::cout << ff << std::endl; });	
 	}; //std::uint32_t and 0+ floats.
 	std::memcpy(buf, "flex array!", sizeof(buf));
+	static_assert(data_serialization::apply_size_v<foobar, decltype(fun2)> == 4);
 	data_serialization::apply<foobar>(fun2, buf, sizeof(buf));
 	std::uint32_t ifloat = {};
 	float ffloat;

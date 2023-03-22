@@ -192,12 +192,16 @@ namespace data_serialization {
 		}
 
 	}
+
+	template <typename... Ts>
+	inline constexpr auto invoke_size_v = detail::required_size<Ts...>();
+
 	template <typename... Ts>
 	requires common_platform::is_transparently_serializable_v<Ts...>
 	[[nodiscard]] decltype(auto) invoke(auto&& f, std::byte* data, std::size_t size)
 	{
 		using F = std::remove_reference_t<decltype(f)>;
-		if (size >= detail::required_size<Ts...>()) [[likely]]
+		if (size >= invoke_size_v<Ts...>) [[likely]]
 			return detail::invoke<F, std::tuple<>, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::make_tuple(), data, size);
 		else
 			return detail::invoke<Ts...>(std::forward<F>(f), std::make_tuple(), data, size);
@@ -208,7 +212,7 @@ namespace data_serialization {
 	{
 		using F = std::remove_reference_t<decltype(f)>;
 		using Args = std::remove_reference_t<decltype(args)>;
-		if (size >= detail::required_size<Ts...>()) [[likely]]
+		if (size >= invoke_size_v<Ts...>) [[likely]]
 			return detail::invoke<F, Args, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::forward<Args>(args), data, size);
 		else
 			return detail::invoke<Ts...>(std::forward<F>(f), std::forward<Args>(args), data, size);
@@ -216,7 +220,7 @@ namespace data_serialization {
 
 	template <typename... Ts, std::size_t N>
 	requires (common_platform::is_transparently_serializable_v<Ts...>
-	and N >= detail::required_size<Ts...>())
+	and N >= invoke_size_v<Ts...>)
 	[[nodiscard]] decltype(auto) invoke(auto&& f, std::byte(&data)[N])
 	{
 		using F = std::remove_reference_t<decltype(f)>;
@@ -225,7 +229,7 @@ namespace data_serialization {
 
 	template <typename... Ts, std::size_t N>
 	requires (common_platform::is_transparently_serializable_v<Ts...>
-	and N >= detail::required_size<Ts...>())
+	and N >= invoke_size_v<Ts...>)
 	[[nodiscard]] decltype(auto) invoke(auto&& f, auto&& args, std::byte(&data)[N])
 	{
 		using F = std::remove_reference_t<decltype(f)>;

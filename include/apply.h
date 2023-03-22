@@ -17,7 +17,31 @@ namespace data_serialization {
 		{
 			return data_serialization::invoke<std::remove_reference_t<std::tuple_element_t<Is, T>>...>(std::forward<F>(f), std::forward<Args>(args), data, size);
 		}
+
+		template <typename T, std::size_t... Is>
+		[[nodiscard]] consteval auto invoke_size_pack(const std::index_sequence<Is...>&) noexcept
+		{
+			return invoke_size_v<std::remove_reference_t<std::tuple_element_t<Is, T>>...>;
+		}
+
+		template <typename T, typename F>
+		requires is_unpack_invocable_v<F, T>
+		[[nodiscard]] consteval auto apply_size() noexcept
+		{
+			using TT = tuple_of_refs<T>;
+			return invoke_size_pack<TT>(std::make_index_sequence<std::tuple_size_v<TT>>());
+		}
+		template <typename T, typename F>
+		requires is_unpack_invocable_flex_v<F, T>
+		[[nodiscard]] consteval auto apply_size() noexcept
+		{
+			using TT = tuple_of_refs_flex<T>;
+			return invoke_size_pack<TT>(std::make_index_sequence<std::tuple_size_v<TT>>());
+		}
 	}
+
+	template <common_platform::detail::reflectable_class T, typename F>
+	inline constexpr auto apply_size_v = detail::apply_size<T, F>();
 
 	template <common_platform::detail::reflectable_class T, typename F>
 	requires detail::is_unpack_invocable_v<F, T>
