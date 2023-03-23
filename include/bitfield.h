@@ -597,16 +597,16 @@ namespace std {
 		{
 			return [&] <std::size_t... Is>(const std::index_sequence<Is...>&) {
 				auto hash_element = []<typename T>(auto h, T t) {
-					auto update_hash = [](auto h, auto v) { h ^= std::to_integer<decltype(h)>(v); h *= 0x100000001b3; return h; };
+					auto update_hash = [](auto hv, auto v) { hv ^= std::to_integer<decltype(hv)>(v); hv *= 0x100000001b3; return hv; };
 					auto v = std::hash<T>{}(t);
 					if constexpr (std::numeric_limits<decltype(v)>::digits > std::numeric_limits<unsigned char>::digits)
 						for (auto i = 0; i < std::numeric_limits<decltype(v)>::digits - std::numeric_limits<unsigned char>::digits; i += std::numeric_limits<unsigned char>::digits, v >>= std::numeric_limits<unsigned char>::digits)
 							h = update_hash(h, std::byte(v));
 					return update_hash(h, std::byte(v));
 				};
-				auto h = UINT64_C(0xcbf29ce484222325);
-				((h = hash_element(h, b.get<Is>())), ...);
-				return h;
+				auto hv = UINT64_C(0xcbf29ce484222325);
+				((hv = hash_element(hv, b. template get<Is>())), ...);
+				return hv;
 			}(std::index_sequence_for<Ts...>());
 		}
 	};

@@ -24,25 +24,25 @@ namespace data_serialization {
 			return invoke_size_v<std::remove_reference_t<std::tuple_element_t<Is, T>>...>;
 		}
 
-		template <typename T, typename F>
-		requires is_unpack_invocable_v<F, T>
+		template <typename T, typename F, typename Args>
+		requires is_unpack_invocable_v<F, T, Args>
 		[[nodiscard]] consteval auto apply_size() noexcept
 		{
 			using TT = tuple_of_refs<T>;
 			return invoke_size_pack<TT>(std::make_index_sequence<std::tuple_size_v<TT>>());
 		}
-		template <typename T, typename F>
-		requires is_unpack_invocable_flex_v<F, T>
+		template <typename T, typename F, typename Args>
+		requires is_unpack_invocable_flex_v<F, T, Args>
 		[[nodiscard]] consteval auto apply_size() noexcept
 		{
 			using TT = tuple_of_refs_flex<T>;
 			return invoke_size_pack<TT>(std::make_index_sequence<std::tuple_size_v<TT>>());
 		}
 
-		template <typename T, typename F>
+		template <typename T, typename F, typename Args>
 		[[nodiscard]] consteval auto flex_element_size() noexcept
 		{
-			if constexpr (is_unpack_invocable_flex_v<F, T>) {
+			if constexpr (is_unpack_invocable_flex_v<F, T, Args>) {
 				using TT = tuple_of_refs_flex<T>;
 				return sizeof(std::remove_extent_t<std::remove_reference_t<std::tuple_element_t<std::tuple_size_v<TT> -1, TT>>>);
 			}
@@ -50,11 +50,11 @@ namespace data_serialization {
 		}
 	}
 
-	template <common_platform::detail::reflectable_class T, typename F>
-	inline constexpr auto apply_size_v = detail::apply_size<T, F>();
+	template <common_platform::detail::reflectable_class T, typename F, typename Args = std::tuple<>>
+	inline constexpr auto apply_size_v = detail::apply_size<T, F, Args>();
 
-	template <common_platform::detail::reflectable_class T, typename F>
-	inline constexpr auto flex_element_size_v = detail::flex_element_size<T, F>();
+	template <common_platform::detail::reflectable_class T, typename F, typename Args = std::tuple<>>
+	inline constexpr auto flex_element_size_v = detail::flex_element_size<T, F, Args>();
 
 	template <common_platform::detail::reflectable_class T, typename F>
 	requires detail::is_unpack_invocable_v<F, T>

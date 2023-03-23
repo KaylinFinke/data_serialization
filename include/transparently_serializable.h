@@ -23,7 +23,8 @@ namespace common_platform {
 		{
 			requires std::floating_point<F>;
 			requires sizeof(F)* std::numeric_limits<unsigned char>::digits == M + E;
-			requires std::endian::native == std::endian::little;
+			requires (std::endian::native == std::endian::little)
+			or sizeof(F) == 1;
 			requires std::numeric_limits<F>::is_iec559;
 			requires std::numeric_limits<F>::digits == M;
 			requires std::numeric_limits<F>::radix == 2;
@@ -36,9 +37,10 @@ namespace common_platform {
 		concept common_platform_integral = requires
 		{
 			requires std::integral<I>;
-			requires std::endian::native == std::endian::little;
+			requires (std::endian::native == std::endian::little)
+			or sizeof(I) == 1;
 			requires std::has_unique_object_representations_v<I>;
-			requires sizeof(I)* std::numeric_limits<unsigned char>::digits == N;
+			requires sizeof(I) * std::numeric_limits<unsigned char>::digits == N;
 			requires std::numeric_limits<I>::is_integer;
 			requires (std::numeric_limits<I>::digits == N and std::unsigned_integral<I>)
 			or (std::numeric_limits<I>::digits + 1 == N and std::signed_integral<I>);
