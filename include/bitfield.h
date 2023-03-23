@@ -19,6 +19,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <span>
 
 namespace common_platform {
 	namespace detail {
@@ -229,7 +230,7 @@ namespace common_platform {
 				constexpr auto r_shift = offset<N>() - word_offset;
 				using alias_type = std::conditional_t<std::signed_integral<underlying_type>, std::make_signed_t<unsigned_type>, unsigned_type>;
 
-				auto v = extract<alias_type>(s.data() + native_offset<N>());
+				auto v = extract<alias_type, native_offset<N>()>(s);
 
 				if constexpr (std::signed_integral<underlying_type>) {
 					v <<= std::numeric_limits<unsigned_type>::digits - r_shift - size<N>();
@@ -263,20 +264,21 @@ namespace common_platform {
 			constexpr auto s_adjust = std::signed_integral<alias_type> ? hi_bits : 0;
 
 			unsigned_type v;
-			auto s_first = idx(s.data(), s_bit);
+			auto s_first = std::span(s). template subspan<s_bit / std::numeric_limits<unsigned char>::digits>();
+			auto i = std::size_t{};
 
 			if constexpr (not n_first)
 				v = {};
 			else if constexpr (s_adjust < s_shift)
-				v = std::to_integer<unsigned_type>(*s_first++) >> (s_shift - s_adjust);
+				v = std::to_integer<unsigned_type>(s_first[i++]) >> (s_shift - s_adjust);
 			else
-				v = std::to_integer<unsigned_type>(*s_first++) << (s_adjust - s_shift);
+				v = std::to_integer<unsigned_type>(s_first[i++]) << (s_adjust - s_shift);
 
 			for (auto d_shift = n_first; d_shift < l_shift; d_shift += std::numeric_limits<unsigned char>::digits)
-				v |= std::to_integer<unsigned_type>(*s_first++) << (d_shift + s_adjust);
+				v |= std::to_integer<unsigned_type>(s_first[i++]) << (d_shift + s_adjust);
 
 			if constexpr (n_last)
-				v |= std::to_integer<unsigned_type>(*s_first++) << (l_shift + s_adjust);
+				v |= std::to_integer<unsigned_type>(s_first[i++]) << (l_shift + s_adjust);
 
 			if constexpr (std::signed_integral<alias_type>)
 				return static_cast<int_type<N>>(static_cast<alias_type>(v) >> s_adjust);
@@ -337,16 +339,16 @@ namespace common_platform {
 				}();
 
 				if constexpr (std::numeric_limits<unsigned_type>::digits not_eq size<N>()) {
-					auto v = extract<alias_type>(s.data() + native_offset<N>());
+					auto v = extract<alias_type, native_offset<N>()>(s);
 					v &= ~mask;
 					if constexpr (l_shift + size<N>() == std::numeric_limits<unsigned_type>::digits)
 						v |= (static_cast<unsigned_type>(value) << l_shift);
 					else
 						v |= (static_cast<unsigned_type>(value) << l_shift) & mask;
 
-					deposit(s.data() + native_offset<N>(), v);
+					deposit<native_offset<N>()>(s, v);
 				} else
-					deposit(s.data() + native_offset<N>(), static_cast<alias_type>(value));
+					deposit<native_offset<N>()>(s, static_cast<alias_type>(value));
 			}
 		}
 
@@ -368,25 +370,26 @@ namespace common_platform {
 			using unsigned_type = std::make_unsigned_t<decltype(+underlying_type())>;
 
 			auto u = static_cast<unsigned_type>(value);
-			auto d_first = idx(s.data(), d_bit);
+			auto d_first = std::span(s). template subspan<d_bit / std::numeric_limits<unsigned char>::digits>();
+			auto i = std::size_t{};
 
 			if constexpr (n_first) {
-				*d_first &= ~(first_mask << f_shift);
+				d_first[i] &= ~(first_mask << f_shift);
 				if constexpr (f_shift + n_first not_eq std::numeric_limits<unsigned char>::digits)
-					*d_first++ |= (static_cast<std::byte>(u) & first_mask) << f_shift;
+					d_first[i++] |= (static_cast<std::byte>(u) & first_mask) << f_shift;
 				else
-					*d_first++ |= static_cast<std::byte>(u) << f_shift;
+					d_first[i++] |= static_cast<std::byte>(u) << f_shift;
 			}
 
 			for (auto s_shift = n_first; s_shift < l_shift; s_shift += std::numeric_limits<unsigned char>::digits)
-				*d_first++ = static_cast<std::byte>(u >> s_shift);
+				d_first[i++] = static_cast<std::byte>(u >> s_shift);
 
 			if constexpr (n_last) {
-				*d_first &= ~last_mask;
+				d_first[i] &= ~last_mask;
 				if constexpr (l_shift + n_last not_eq std::numeric_limits<unsigned char>::digits)
-					*d_first |= static_cast<std::byte>(u >> l_shift) & last_mask;
+					d_first[i] |= static_cast<std::byte>(u >> l_shift) & last_mask;
 				else
-					*d_first |= static_cast<std::byte>(u >> l_shift);
+					d_first[i] |= static_cast<std::byte>(u >> l_shift);
 			}
 		}
 
@@ -457,11 +460,6 @@ namespace common_platform {
 			return n % std::numeric_limits<unsigned char>::digits;
 		}
 
-		[[nodiscard]] static constexpr auto idx(const auto it, const auto n)
-		{
-			return it + n / std::numeric_limits<unsigned char>::digits;
-		}
-
 		template <typename T, std::size_t N>
 		[[nodiscard]] static constexpr auto contained_in_idx(const std::size_t byte) noexcept
 		{
@@ -506,22 +504,22 @@ namespace common_platform {
 			else return native_offset<N, native_type<N>, false>();
 		}
 
-		template <typename T>
-		[[nodiscard]] static constexpr auto extract(auto p) noexcept
+		template <typename T, std::size_t N>
+		[[nodiscard]] static constexpr auto extract(auto& s) noexcept
 		{
 			alignas(T) std::array<std::byte, sizeof(T)> v;
 			static_assert(std::has_unique_object_representations_v<decltype(v)>);
-			std::copy_n(p, sizeof v, v.data());
+			std::ranges::copy(std::span(s). template subspan<N, sizeof(T)>(), v.data());
 			return std::bit_cast<T>(v);
 		}
 
-		template <typename T>
-		static constexpr auto deposit(const auto p, T t) noexcept
+		template <std::size_t N, typename T>
+		static constexpr auto deposit(auto& s, T t) noexcept
 		{
 			alignas(T) std::array<std::byte, sizeof(T)> v;
 			static_assert(std::has_unique_object_representations_v<decltype(v)>);
 			v = std::bit_cast<decltype(v)>(t);
-			std::copy_n(v.data(), sizeof v, p);
+			std::ranges::copy(v, std::span(s). template subspan<N, sizeof(T)>().data());
 		}
 	};
 
@@ -580,12 +578,11 @@ namespace std {
 	{
 		constexpr auto bit_size = (Ts::value + ... + 0);
 		constexpr auto trailing_bits = bit_size % std::numeric_limits<unsigned char>::digits;
-		auto first = b.s.begin();
-		auto last = b.s.end() - bool(trailing_bits);
+		auto s = std::span(b.s). template subspan<0, bit_size / std::numeric_limits<unsigned char>::digits>();
 		auto update_hash = [](auto h, auto v) { h ^= std::to_integer<decltype(h)>(v); h *= 0x100000001b3; return h; };
-		auto hash = std::accumulate(first, last, UINT64_C(0xcbf29ce484222325), update_hash);
+		auto hash = std::accumulate(s.begin(), s.end(), UINT64_C(0xcbf29ce484222325), update_hash);
 		if constexpr (trailing_bits)
-			return std::hash<decltype(hash)>{}(update_hash(hash, *last & ~(std::byte{ std::numeric_limits<unsigned char>::max() } << trailing_bits)));
+			return std::hash<decltype(hash)>{}(update_hash(hash, b.s.back() & ~(std::byte{ std::numeric_limits<unsigned char>::max() } << trailing_bits)));
 		else
 			return std::hash<decltype(hash)>{}(hash);
 	}};

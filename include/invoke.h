@@ -5,7 +5,9 @@
 #include "transparently_serializable.h"
 #include "reinterpret_memory.h"
 
+#include <algorithm>
 #include <concepts>
+#include <span>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -31,19 +33,19 @@ namespace data_serialization {
 		}
 
 		template <typename T>
-		[[nodiscard]] auto unpack_element(std::byte*& data, std::size_t& size) noexcept
+		[[nodiscard]] auto unpack_element(std::span<std::byte>& data) noexcept
 		{
 			using E = std::conditional_t<std::is_unbounded_array_v<T>, std::remove_extent_t<T>, T>;
-			auto sz = std::is_unbounded_array_v<T> ? size / sizeof(E) * sizeof(E) : sizeof(E);
-			data += sz;
-			size -= sz;
+			auto sz = std::is_unbounded_array_v<T> ? data.size() / sizeof(E) * sizeof(E) : sizeof(E);
+			auto p = data;
+			data = data.subspan(sz);
 			if constexpr (std::is_unbounded_array_v<T>) {
 				if (sz) //unsafe cast. we cast back to E* before use.
-					return reinterpret_cast<T*>(type_conversion::reinterpret_memory<E>(data - sz, sz));
+					return reinterpret_cast<T*>(type_conversion::reinterpret_memory<E>(p.data(), sz));
 				else
 					return static_cast<T*>(nullptr);
 			} else
-				return type_conversion::reinterpret_memory<E>(data - sz, sz);
+				return type_conversion::reinterpret_memory<E>(p.data(), sz);
 		}
 
 		template <typename T>
@@ -93,8 +95,8 @@ namespace data_serialization {
 
 				using R = std::decay_t<decltype(std::apply(std::forward<F>(f), std::declval<Tuple>()))>;
 
-				auto remaining = size;
-				((std::get<Is>(ptrs) = unpack_element<Ts>(data, remaining)), ...);
+				auto remaining = std::span(data, size);
+				((std::get<Is>(ptrs) = unpack_element<Ts>(remaining)), ...);
 				if constexpr (std::is_unbounded_array_v<A>) {
 					auto n = (size - required_size<Ts...>()) / sizeof(std::remove_extent_t<A>);
 					if constexpr (std::is_void_v<R>) std::apply(std::forward<F>(f), std::tuple_cat(std::forward<Args>(args), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(n)));
@@ -182,13 +184,14 @@ namespace data_serialization {
 		{
 			using F = std::remove_reference_t<decltype(f)>;
 			using Args = std::remove_reference_t<decltype(args)>;
-			
+
 			if (size < required_size<Ts...>()) [[unlikely]] {
-				alignas(Ts...) std::byte temp[required_size<Ts...>()];
-				if (size) std::memcpy(temp, data, size);
-				if (size != sizeof(temp)) std::memset(temp + size, 0, (sizeof(temp) - size));
-				return detail::invoke<F, Args, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::forward<Args>(args), temp, sizeof(temp));
-			} else
+				alignas(Ts...) std::array<std::byte, required_size<Ts...>()> temp;
+				std::copy_n(data, size, temp.data());
+				std::ranges::fill(std::span(temp).subspan(sizeof(temp) - size), std::byte{});
+				return detail::invoke<F, Args, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::forward<Args>(args), temp.data(), sizeof(temp));
+			}
+			else
 				return detail::invoke<F, Args, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::forward<Args>(args), data, size);
 		}
 
