@@ -24,7 +24,7 @@ using i64 = std::int_least64_t;
 using f32 = float;
 using f64 = double;
 
-//define some types that are transparently serializable on any paltform with 8 bit chars.
+//define some types that are transparently serializable on any platform with 8 bit chars.
 namespace net {
 	using flag_tag = std::true_type;
 
@@ -69,7 +69,7 @@ namespace net {
 
 //You can use any type that has a common representation directly on your platforms, 
 //but be sure to check it's the right size using numeric_limits and account for alignment requirements.
-//it's much eaiser to just use the bitfield class, which is what net:: types are in this example. THis is
+//it's much eaiser to just use the bitfield class, which is what net:: types are in this example. This is
 //a type we'll use in our example protocol.
 static_assert(std::numeric_limits<u8>::digits == 8);
 static_assert(common_platform::is_transparently_serializable_v<u8>);
@@ -96,7 +96,7 @@ enum class dragon_result : u32 {
 	last,
 };
 
-//Networkable versions of these tyes with minimal alignment requirement. 
+//Networkable versions of these types with minimal alignment requirement. 
 //Note how we picked dragon result to be a 2 bit bitfield. It's individually addressable so it takes up 
 //an entire byte, but it doesn't take up 2.
 namespace net
@@ -371,7 +371,7 @@ namespace client {
 }
 
 //This is a toy application, so just memcpy random numbers of bytes between client/server objects to simulate networking. It's O(n^2) for sending a whole buffer
-//in the worst case, but real applications can use a biparte buffer.
+//in the worst case, but real applications can use a bipartite buffer.
 namespace {
 	void fake_networking(server::server_context& svr, const std::span<client::user_context, 5>& usrs, std::size_t i)
 	{
@@ -524,7 +524,7 @@ bool client::handle_message<server::attack_result>::operator()(client::user_cont
 		printf("knight %d has killed a dragon named %s!\n", usr->id, usr->active_dragon.name.c_str());
 		break;
 	case dragon_result::last:
-		//server sent us a bad value. don't know how to continue.
+		//server sent us a bad value; don't know how to continue.
 		std::terminate();
 	}
 
