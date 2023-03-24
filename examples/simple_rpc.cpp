@@ -1,7 +1,8 @@
 #include "apply.h"
-#include <string>
 #include <cstring>
 #include <random>
+#include <span>
+#include <string>
 
 // Our system only cares that we're operating on a platform with 8 bit characters.
 // Networking without this is perfectly possible, but the APIs would be foreign to us.
@@ -224,7 +225,7 @@ namespace client {
 		handle_message<server::hatch_dragon>
 	>;
 
-	using context = std::tuple<user_context*>;	
+	using context = std::tuple<user_context*>;
 }
 
 namespace server {
@@ -277,8 +278,8 @@ namespace {
 
 		if (sizeof(data) - size < sizeof(header) + sizeof(message)) return false;
 
-		std::memcpy(data + size, reinterpret_cast<const std::byte*>(&header), sizeof(header));
-		std::memcpy(data + size + sizeof(header), reinterpret_cast<const std::byte*>(&message), sizeof(message));
+		std::memcpy(std::span(data).subspan(size).data(), reinterpret_cast<const std::byte*>(&header), sizeof(header));
+		std::memcpy(std::span(data).subspan(size + sizeof(header)).data(), reinterpret_cast<const std::byte*>(&message), sizeof(message));
 		size += sizeof(header) + sizeof(message);
 		return true;
 	}
@@ -286,7 +287,7 @@ namespace {
 	template <typename H, typename Args, common_platform::transparently_serializable T>
 	requires (is_message<H, T> and is_variable_length_message<H, T, Args>
 	and alignof(net::header_variable) == 1 and alignof(T) == 1 and common_platform::transparently_serializable<net::header_variable, T>)
-	auto send_message(std::byte(&data)[1024], std::size_t& size, const T& message, std::size_t n)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n)
 	{
 		net::header_variable header{};
 		header.id = message_id_v<H, T>;
@@ -296,14 +297,14 @@ namespace {
 
 		if (sizeof(data) - size < sizeof(header) + vsize) return false;
 
-		std::memcpy(data + size, reinterpret_cast<const std::byte*>(&header), sizeof(header));
-		std::memcpy(data + size + sizeof(header), reinterpret_cast<const std::byte*>(&message), vsize);
+		std::memcpy(std::span(data).subspan(size).data(), reinterpret_cast<const std::byte*>(&header), sizeof(header));
+		std::memcpy(std::span(data).subspan(size + sizeof(header)).data(), reinterpret_cast<const std::byte*>(&message), vsize);
 		size += vsize + sizeof(header);
 		return true;
 	}
 
-	template <typename H, std::size_t Lo = std::size_t{}, std::size_t Hi = std::tuple_size_v<H> -1, typename Args>
-	auto recv_message(std::size_t id, Args&& args, std::byte* data, std::size_t size)
+	template <typename H, std::size_t Lo = std::size_t{}, std::size_t Hi = std::tuple_size_v<H> -1, typename Args >
+	auto recv_message(std::size_t id, Args&& args, const std::span<std::byte>& data)
 	{
 		constexpr auto M = Lo + (Hi - Lo) / 2;
 		if constexpr (M >= std::tuple_size_v<H>) return std::size_t{};
@@ -313,57 +314,57 @@ namespace {
 				using message = typename handler::message_type;
 				auto message_size = data_serialization::apply_size_v<message, handler, Args>;
 				auto flex_size = data_serialization::flex_element_size_v<message, handler, Args>;
-				if (auto header_size = sizeof(net::header_variable); flex_size and size >= header_size) {
-					if (size - header_size < message_size) return std::size_t{};
-					auto header = type_conversion::reinterpret_memory<net::header_variable>(data, header_size);
-					if ((size - header_size - message_size) / flex_size < u8(header->count)) return std::size_t{};
-					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data + header_size, message_size + flex_size * u8(header->count)))
+				if (auto header_size = sizeof(net::header_variable); flex_size and data.size() >= header_size) {
+					if (data.size() - header_size < message_size) return std::size_t{};
+					auto header = type_conversion::reinterpret_memory<net::header_variable>(data.data(), header_size);
+					if ((data.size() - header_size - message_size) / flex_size < u8(header->count)) return std::size_t{};
+					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data.subspan(header_size).data(), message_size + flex_size * u8(header->count)))
 						return header_size + message_size + flex_size * u8(header->count);
 					else
 						return std::size_t{};
-				} else if (auto header_size_fixed = sizeof(net::header_fixed); not flex_size and size >= header_size_fixed) {
-					if (size - header_size_fixed < message_size) return std::size_t{};
-					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data + header_size_fixed, message_size))
+				} else if (auto header_size_fixed = sizeof(net::header_fixed); not flex_size and data.size() >= header_size_fixed) {
+					if (data.size() - header_size_fixed < message_size) return std::size_t{};
+					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data.subspan(header_size_fixed).data(), message_size))
 						return header_size_fixed + message_size;
 					else
 						return std::size_t{};
 				} else
 					return std::size_t{};
-			} else if (id < M) return recv_message<H, Lo, M - 1>(id, std::forward<Args>(args), data, size);
-			else return recv_message<H, M + 1, Hi>(id, std::forward<Args>(args), data, size);
+			} else if (id < M) return recv_message<H, Lo, M - 1>(id, std::forward<Args>(args), data);
+			else return recv_message<H, M + 1, Hi>(id, std::forward<Args>(args), data);
 		}
 	}
 
 	template <typename H, typename Args>
-	auto recv_message(Args&& args, std::byte* data, std::size_t size)
+	auto recv_message(Args&& args, const std::span<std::byte>& data)
 	{
-		if (size >= sizeof(net::header_fixed))
-			if (auto id = u8(*type_conversion::reinterpret_memory<net::header_fixed>(data, sizeof(net::header_fixed))); id < std::tuple_size_v<H>)
-				return recv_message<H>(id, std::forward<Args>(args), data, size);
+		if (data.size() >= sizeof(net::header_fixed))
+			if (auto id = u8(*type_conversion::reinterpret_memory<net::header_fixed>(data.data(), sizeof(net::header_fixed))); id < std::tuple_size_v<H>)
+				return recv_message<H>(id, std::forward<Args>(args), data);
 		return std::size_t{};
 	}
 }
 
 namespace server {
 	template <common_platform::transparently_serializable T>
-	auto send_message(std::byte(&data)[1024], std::size_t& size, const T& message)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message)
 	{
 		return ::send_message<client::handlers, client::context>(data, size, message);
 	}
 	template <common_platform::transparently_serializable T>
-	auto send_message(std::byte(&data)[1024], std::size_t& size, const T& message, std::size_t n)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n)
 	{
 		return ::send_message<client::handlers, client::context>(data, size, message, n);
 	}
 }
 namespace client {
 	template <common_platform::transparently_serializable T>
-	auto send_message(std::byte(&data)[1024], std::size_t& size, const T& message)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message)
 	{
 		return ::send_message<server::handlers, server::context>(data, size, message);
 	}
 	template <common_platform::transparently_serializable T>
-	auto send_message(std::byte(&data)[1024], std::size_t& size, const T& message, std::size_t n)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n)
 	{
 		return ::send_message<server::handlers, server::context>(data, size, message, n);
 	}
@@ -372,29 +373,30 @@ namespace client {
 //This is a toy application, so just memcpy random numbers of bytes between client/server objects to simulate networking. It's O(n^2) for sending a whole buffer
 //in the worst case, but real applications can use a biparte buffer.
 namespace {
-	void fake_networking(server::server_context& svr, client::user_context(&usrs)[5], std::size_t i)
+	void fake_networking(server::server_context& svr, const std::span<client::user_context, 5>& usrs, std::size_t i)
 	{
 		std::random_device seed;
 		std::default_random_engine engine(seed());
+		auto svr_users = std::span(svr.users);
 		{
-			std::uniform_int_distribution<std::size_t> distribution(0, std::min(usrs[i].out_size, sizeof(svr.users[i].in) - svr.users[i].in_size));
+			std::uniform_int_distribution<std::size_t> distribution(0, std::min(usrs[i].out_size, sizeof(svr_users[i].in) - svr_users[i].in_size));
 			auto n = distribution(engine);
 			if (n)
-				std::memcpy(svr.users[i].in + svr.users[i].in_size, usrs[i].out, n);
+				std::memcpy(std::span(svr_users[i].in).subspan(svr_users[i].in_size).data(), usrs[i].out, n);
 			usrs[i].out_size -= n;
 			if (usrs[i].out_size and n)
-				std::memmove(usrs[i].out, usrs[i].out + n, usrs[i].out_size);
+				std::memmove(usrs[i].out, std::span(usrs[i].out).subspan(n).data(), usrs[i].out_size);
 
-			svr.users[i].in_size += n;
+			svr_users[i].in_size += n;
 		}
 		{
-			std::uniform_int_distribution<std::size_t> distribution(0, std::min(sizeof(usrs[i].in) - usrs[i].in_size, svr.users[i].out_size));
+			std::uniform_int_distribution<std::size_t> distribution(0, std::min(sizeof(usrs[i].in) - usrs[i].in_size, svr_users[i].out_size));
 			auto n = distribution(engine);
 			if (n)
-				std::memcpy(usrs[i].in + usrs[i].in_size, svr.users[i].out, n);
-			svr.users[i].out_size -= n;
-			if (svr.users[i].out_size and n)
-				std::memmove(svr.users[i].out, svr.users[i].out + n, svr.users[i].out_size);
+				std::memcpy(std::span(usrs[i].in).subspan(usrs[i].in_size).data(), svr_users[i].out, n);
+			svr_users[i].out_size -= n;
+			if (svr_users[i].out_size and n)
+				std::memmove(svr_users[i].out, std::span(svr_users[i].out).subspan(n).data(), svr_users[i].out_size);
 
 			usrs[i].in_size += n;
 		}
@@ -412,8 +414,8 @@ namespace {
 		svr.active_dragon.health = svr.active_dragon.max_health = u8(std::uniform_int_distribution<int>(10, 25)(engine));
 		svr.has_dragon = true;
 		static constexpr const char* names[7] = { "Susan", "Geoff", "Princess", "Dragonette", "Carl", "Muffin", "Whiskers" };
-		svr.active_dragon.name = names[std::uniform_int_distribution<int>(0, 6)(engine)];
-		svr.active_dragon.can_fly = std::uniform_int_distribution<int>(0, 1)(engine);
+		svr.active_dragon.name = std::span(names)[std::size_t(std::uniform_int_distribution<int>(0, 6)(engine))];
+		svr.active_dragon.can_fly = bool(std::uniform_int_distribution<int>(0, 1)(engine));
 		std::for_each_n(svr.users, svr.user_size, [&](auto& usr) { usr.told_dragon = false; });
 	}
 
@@ -432,10 +434,10 @@ namespace {
 	void try_handle_network(server::server_context& svr, server::user_context& usr)
 	{
 		auto read = std::size_t{};
-		for (auto n = std::size_t{}; (n = recv_message<server::handlers>(std::make_tuple(&svr, &usr), usr.in + read, usr.in_size - read)); read += n);
+		for (auto n = std::size_t{}; (n = recv_message<server::handlers>(std::make_tuple(&svr, &usr), std::span(usr.in, usr.in_size).subspan(read))); read += n);
 
 		if (read != usr.in_size and read)
-			std::memmove(usr.in, usr.in + read, usr.in_size - read);
+			std::memmove(usr.in, std::span(usr.in, usr.in_size).subspan(read).data(), usr.in_size - read);
 		usr.in_size -= read;
 	}
 
@@ -452,10 +454,10 @@ namespace {
 	void try_handle_network(client::user_context& usr)
 	{
 		auto read = std::size_t{};
-		for (auto n = std::size_t{}; (n = recv_message<client::handlers>(std::make_tuple(&usr), usr.in + read, usr.in_size - read)); read += n);
+		for (auto n = std::size_t{}; (n = recv_message<client::handlers>(std::make_tuple(&usr), std::span(usr.in, usr.in_size).subspan(read))); read += n);
 
 		if (read != usr.in_size and read)
-			std::memmove(usr.in, usr.in + read, usr.in_size - read);
+			std::memmove(usr.in, std::span(usr.in, usr.in_size).subspan(read).data(), usr.in_size - read);
 		usr.in_size -= read;
 	}
 
@@ -466,7 +468,7 @@ namespace {
 		std::default_random_engine engine(seed());
 		client::attack_dragon message{};
 		message.id = usr.active_dragon.id;
-		message.arrow_or_sword = std::uniform_int_distribution<int>(0, 1)(engine);
+		message.arrow_or_sword = bool(std::uniform_int_distribution<int>(0, 1)(engine));
 		client::send_message(usr.out, usr.out_size, message);
 	}
 
@@ -533,10 +535,10 @@ bool client::handle_message<server::attack_result>::operator()(client::user_cont
 bool client::handle_message<server::hatch_dragon>::operator()(client::user_context* usr, const unit_id& id, dragon_color color, bool, char name[], std::size_t len) noexcept
 {
 	//false results indicate a bug in our stack/server. we can't continue.
-	if (not len or name[len - 1] or std::memchr(name, 0, len - 1) or len > sizeof(server::hatch_dragon::name)) std::terminate();
+	if (not len or std::span(name, len)[len - 1] or std::memchr(name, 0, len - 1) or len > sizeof(server::hatch_dragon::name)) std::terminate();
 	if (color >= dragon_color::last) std::terminate();
 
-	printf("knight %d has spotted a fearsome %s dragon named %s!\n", usr->id, color_name[std::size_t(color)], name);
+	printf("knight %d has spotted a fearsome %s dragon named %s!\n", usr->id, std::span(color_name)[std::size_t(color)], name);
 
 	//note: our knights are dumb and ignore if the dragon can fly.
 	usr->has_dragon = true;
@@ -552,7 +554,7 @@ int main()
 {
 	server::server_context svr{};
 	client::user_context usr[5]{};
-	
+
 	//add some clients.
 	svr.user_size = 5;
 	for (auto i = 0; auto& u : usr)
