@@ -273,7 +273,7 @@ namespace {
 	and alignof(net::header_fixed) == 1 and alignof(T) == 1 and common_platform::transparently_serializable<net::header_fixed, T>)
 	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message)
 	{
-		net::header_fixed header{}; //always initialize net types. assignmnet may read the current value.
+		net::header_fixed header{}; //always initialize net types. assignment may read the current value.
 		header = message_id_v<H, T>;
 
 		if (sizeof(data) - size < sizeof(header) + sizeof(message)) return false;
