@@ -278,8 +278,8 @@ namespace {
 
 		if (sizeof(data) - size < sizeof(header) + sizeof(message)) return false;
 
-		std::memcpy(std::span(data).subspan(size).data(), reinterpret_cast<const std::byte*>(&header), sizeof(header));
-		std::memcpy(std::span(data).subspan(size + sizeof(header)).data(), reinterpret_cast<const std::byte*>(&message), sizeof(message));
+		std::memcpy(std::span(data).subspan(size, sizeof(header)).data(), reinterpret_cast<const std::byte*>(&header), sizeof(header));
+		std::memcpy(std::span(data).subspan(size + sizeof(header), sizeof(message)).data(), reinterpret_cast<const std::byte*>(&message), sizeof(message));
 		size += sizeof(header) + sizeof(message);
 		return true;
 	}
@@ -297,8 +297,8 @@ namespace {
 
 		if (sizeof(data) - size < sizeof(header) + vsize) return false;
 
-		std::memcpy(std::span(data).subspan(size).data(), reinterpret_cast<const std::byte*>(&header), sizeof(header));
-		std::memcpy(std::span(data).subspan(size + sizeof(header)).data(), reinterpret_cast<const std::byte*>(&message), vsize);
+		std::memcpy(std::span(data).subspan(size, sizeof(header)).data(), reinterpret_cast<const std::byte*>(&header), sizeof(header));
+		std::memcpy(std::span(data).subspan(size + sizeof(header), vsize).data(), reinterpret_cast<const std::byte*>(&message), vsize);
 		size += vsize + sizeof(header);
 		return true;
 	}
@@ -316,15 +316,15 @@ namespace {
 				auto flex_size = data_serialization::flex_element_size_v<message, handler, Args>;
 				if (auto header_size = sizeof(net::header_variable); flex_size and data.size() >= header_size) {
 					if (data.size() - header_size < message_size) return std::size_t{};
-					auto header = type_conversion::reinterpret_memory<net::header_variable>(data.data(), header_size);
+					auto header = type_conversion::reinterpret_memory<net::header_variable>(data.first(header_size).data(), header_size);
 					if ((data.size() - header_size - message_size) / flex_size < u8(header->count)) return std::size_t{};
-					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data.subspan(header_size).data(), message_size + flex_size * u8(header->count)))
+					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data.subspan(header_size, message_size + flex_size * u8(header->count)).data(), message_size + flex_size * u8(header->count)))
 						return header_size + message_size + flex_size * u8(header->count);
 					else
 						return std::size_t{};
 				} else if (auto header_size_fixed = sizeof(net::header_fixed); not flex_size and data.size() >= header_size_fixed) {
 					if (data.size() - header_size_fixed < message_size) return std::size_t{};
-					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data.subspan(header_size_fixed).data(), message_size))
+					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data.subspan(header_size_fixed, message_size).data(), message_size))
 						return header_size_fixed + message_size;
 					else
 						return std::size_t{};
@@ -339,7 +339,7 @@ namespace {
 	auto recv_message(Args&& args, const std::span<std::byte>& data)
 	{
 		if (data.size() >= sizeof(net::header_fixed))
-			if (auto id = u8(*type_conversion::reinterpret_memory<net::header_fixed>(data.data(), sizeof(net::header_fixed))); id < std::tuple_size_v<H>)
+			if (auto id = u8(*type_conversion::reinterpret_memory<net::header_fixed>(data.first(sizeof(net::header_fixed)).data(), sizeof(net::header_fixed))); id < std::tuple_size_v<H>)
 				return recv_message<H>(id, std::forward<Args>(args), data);
 		return std::size_t{};
 	}
@@ -382,10 +382,10 @@ namespace {
 			std::uniform_int_distribution<std::size_t> distribution(0, std::min(usrs[i].out_size, sizeof(svr_users[i].in) - svr_users[i].in_size));
 			auto n = distribution(engine);
 			if (n)
-				std::memcpy(std::span(svr_users[i].in).subspan(svr_users[i].in_size).data(), usrs[i].out, n);
+				std::memcpy(std::span(svr_users[i].in).subspan(svr_users[i].in_size, n).data(), usrs[i].out, n);
 			usrs[i].out_size -= n;
 			if (usrs[i].out_size and n)
-				std::memmove(usrs[i].out, std::span(usrs[i].out).subspan(n).data(), usrs[i].out_size);
+				std::memmove(usrs[i].out, std::span(usrs[i].out).subspan(n, usrs[i].out_size).data(), usrs[i].out_size);
 
 			svr_users[i].in_size += n;
 		}
@@ -393,10 +393,10 @@ namespace {
 			std::uniform_int_distribution<std::size_t> distribution(0, std::min(sizeof(usrs[i].in) - usrs[i].in_size, svr_users[i].out_size));
 			auto n = distribution(engine);
 			if (n)
-				std::memcpy(std::span(usrs[i].in).subspan(usrs[i].in_size).data(), svr_users[i].out, n);
+				std::memcpy(std::span(usrs[i].in).subspan(usrs[i].in_size, n).data(), svr_users[i].out, n);
 			svr_users[i].out_size -= n;
 			if (svr_users[i].out_size and n)
-				std::memmove(svr_users[i].out, std::span(svr_users[i].out).subspan(n).data(), svr_users[i].out_size);
+				std::memmove(svr_users[i].out, std::span(svr_users[i].out).subspan(n, svr_users[i].out_size).data(), svr_users[i].out_size);
 
 			usrs[i].in_size += n;
 		}
@@ -437,7 +437,7 @@ namespace {
 		for (auto n = std::size_t{}; (n = recv_message<server::handlers>(std::make_tuple(&svr, &usr), std::span(usr.in, usr.in_size).subspan(read))); read += n);
 
 		if (read != usr.in_size and read)
-			std::memmove(usr.in, std::span(usr.in, usr.in_size).subspan(read).data(), usr.in_size - read);
+			std::memmove(usr.in, std::span(usr.in, usr.in_size).subspan(read, usr.in_size - read).data(), usr.in_size - read);
 		usr.in_size -= read;
 	}
 
@@ -457,7 +457,7 @@ namespace {
 		for (auto n = std::size_t{}; (n = recv_message<client::handlers>(std::make_tuple(&usr), std::span(usr.in, usr.in_size).subspan(read))); read += n);
 
 		if (read != usr.in_size and read)
-			std::memmove(usr.in, std::span(usr.in, usr.in_size).subspan(read).data(), usr.in_size - read);
+			std::memmove(usr.in, std::span(usr.in, usr.in_size).subspan(read, usr.in_size - read).data(), usr.in_size - read);
 		usr.in_size -= read;
 	}
 
