@@ -322,10 +322,10 @@ namespace {
 	{
 		//The size needed to call data_serialization::apply without copying.
 		//That is, the memory required to construct the minimal number of arguments to F.
-		auto size = data_serialization::apply_size_v<T, F, Args>;
+		constexpr auto size = data_serialization::apply_size_v<T, F, Args>;
 		//If F signifies that T should be interpreted as a struct with a flexible array member E at the end,
 		//This is sizeof(std::remove_extent_t<E>).
-		auto element_size = data_serialization::flex_element_size_v<T, F, Args>;
+		constexpr auto element_size = data_serialization::flex_element_size_v<T, F, Args>;
 		auto message_size = size + count * element_size;
 		if (data.size() < message_size) return std::size_t{};
 		//Where as std::apply calls F with a std::tuple, data_serialization::apply calls F constructing the elements of
