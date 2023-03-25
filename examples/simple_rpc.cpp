@@ -303,44 +303,58 @@ namespace {
 		return true;
 	}
 
+	template <typename T>
+	[[nodiscard]] auto recv_header(const std::span<std::byte>& data)
+	{
+		if (data.size() < sizeof(T)) return static_cast<T*>(nullptr);
+		return type_conversion::reinterpret_memory<T>(data.first(sizeof(T)).data(), sizeof(T));
+	}
+
+	template <typename Hdr, typename T, typename F, typename Args>
+	[[nodiscard]] auto recv_message_body(Args&& args, const std::span<std::byte>& data, u8 count = u8())
+	{
+		auto size = data_serialization::apply_size_v<T, F, Args>;
+		auto element_size = data_serialization::flex_element_size_v<T, F, Args>;
+		auto message_size = size + count * element_size;
+		if (data.size() < message_size) return std::size_t{};
+		if (data_serialization::apply<T>(F{}, std::forward<Args>(args), data.first(message_size).data(), message_size))
+			return message_size + sizeof(Hdr);
+		return std::size_t{};
+	}
+
+	template <typename H, std::size_t ID, typename Args>
+	[[nodiscard]] auto recv_message_id(Args&& args, const std::span<std::byte>& data)
+	{
+		using F = std::tuple_element_t<ID, H>;
+		using T = typename F::message_type;
+		using Hdr = std::conditional_t<bool(data_serialization::flex_element_size_v<T, F, Args>), net::header_variable, net::header_fixed>;
+		if (auto header = recv_header<Hdr>(data)) {
+			if constexpr (std::is_same_v<Hdr, net::header_variable>)
+				return recv_message_body<Hdr, T, F>(std::forward<Args>(args), data.subspan(sizeof(Hdr)), header->count);
+			else
+				return recv_message_body<Hdr, T, F>(std::forward<Args>(args), data.subspan(sizeof(Hdr)));
+		} else
+			return std::size_t{};
+	}
+
 	template <typename H, std::size_t Lo = std::size_t{}, std::size_t Hi = std::tuple_size_v<H> -1, typename Args >
-	auto recv_message(std::size_t id, Args&& args, const std::span<std::byte>& data)
+	[[nodiscard]] auto find_handler(u8 id, Args&& args, const std::span<std::byte>& data)
 	{
 		constexpr auto M = Lo + (Hi - Lo) / 2;
-		if constexpr (M >= std::tuple_size_v<H>) return std::size_t{};
-		else {
-			if (id == M) {
-				using handler = std::tuple_element_t<M, H>;
-				using message = typename handler::message_type;
-				auto message_size = data_serialization::apply_size_v<message, handler, Args>;
-				auto flex_size = data_serialization::flex_element_size_v<message, handler, Args>;
-				if (auto header_size = sizeof(net::header_variable); flex_size and data.size() >= header_size) {
-					if (data.size() - header_size < message_size) return std::size_t{};
-					auto header = type_conversion::reinterpret_memory<net::header_variable>(data.first(header_size).data(), header_size);
-					if ((data.size() - header_size - message_size) / flex_size < u8(header->count)) return std::size_t{};
-					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data.subspan(header_size, message_size + flex_size * u8(header->count)).data(), message_size + flex_size * u8(header->count)))
-						return header_size + message_size + flex_size * u8(header->count);
-					else
-						return std::size_t{};
-				} else if (auto header_size_fixed = sizeof(net::header_fixed); not flex_size and data.size() >= header_size_fixed) {
-					if (data.size() - header_size_fixed < message_size) return std::size_t{};
-					if (data_serialization::apply<message>(handler{}, std::forward<Args>(args), data.subspan(header_size_fixed, message_size).data(), message_size))
-						return header_size_fixed + message_size;
-					else
-						return std::size_t{};
-				} else
-					return std::size_t{};
-			} else if (id < M) return recv_message<H, Lo, M - 1>(id, std::forward<Args>(args), data);
-			else return recv_message<H, M + 1, Hi>(id, std::forward<Args>(args), data);
+		if (id == M) return recv_message_id<H, M, Args>(std::forward<Args>(args), data);
+		else if (id < M) {
+			if constexpr (M > Lo) return find_handler<H, Lo, M - 1>(id, std::forward<Args>(args), data);
+		} else {
+			if constexpr (M < Hi) return find_handler<H, M + 1, Hi>(id, std::forward<Args>(args), data);
 		}
+		return std::size_t{};
 	}
 
 	template <typename H, typename Args>
-	auto recv_message(Args&& args, const std::span<std::byte>& data)
+	[[nodiscard]] auto recv_message(Args&& args, const std::span<std::byte>& data)
 	{
-		if (data.size() >= sizeof(net::header_fixed))
-			if (auto id = u8(*type_conversion::reinterpret_memory<net::header_fixed>(data.first(sizeof(net::header_fixed)).data(), sizeof(net::header_fixed))); id < std::tuple_size_v<H>)
-				return recv_message<H>(id, std::forward<Args>(args), data);
+		if (auto header = recv_header<net::header_fixed>(data))
+			return find_handler<H>(*header, std::forward<Args>(args), data);
 		return std::size_t{};
 	}
 }
