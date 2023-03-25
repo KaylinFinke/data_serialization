@@ -25,6 +25,10 @@ using f32 = float;
 using f64 = double;
 
 //define some types that are transparently serializable on any platform with 8 bit chars.
+//You can pack more than one field in a common_platform::bitfield but this way fields are
+//individually addressable on all platforms at the cost of not having the same representation
+//on platforms that don't support 8 bit chars. For this simple example, we choose to simply
+//compile time assert this is the case.
 namespace net {
 	using flag_tag = std::true_type;
 
@@ -69,7 +73,7 @@ namespace net {
 
 //You can use any type that has a common representation directly on your platforms, 
 //but be sure to check it's the right size using numeric_limits and account for alignment requirements.
-//it's much eaiser to just use the bitfield class, which is what net:: types are in this example. This is
+//it's much easier to just use the bitfield class, which is what net:: types are in this example. This is
 //a type we'll use in our example protocol.
 static_assert(std::numeric_limits<u8>::digits == 8);
 static_assert(common_platform::is_transparently_serializable_v<u8>);
@@ -98,13 +102,14 @@ enum class dragon_result : u32 {
 
 //Networkable versions of these types with minimal alignment requirement. 
 //Note how we picked dragon result to be a 2 bit bitfield. It's individually addressable so it takes up 
-//an entire byte, but it doesn't take up 2.
+//an entire byte, but it doesn't take up 4.
 namespace net
 {
 	using dragon_color = common_platform::bitfield < std::integral_constant < ::dragon_color, ::dragon_color{ 16 } >> ;
 	using dragon_result = common_platform::bitfield < std::integral_constant < ::dragon_result, ::dragon_result{ 2 } >> ;
 }
 
+//Define server and client runtime representations of a dragon.
 namespace server {
 	struct dragon
 	{
@@ -147,6 +152,8 @@ namespace server {
 	};
 }
 
+//define some state objects for our server and client representation. 
+//This is mostly a set of network buffers, and the status of the dragon as known to this entity.
 namespace server {
 	struct user_context {
 		bool told_dragon;
@@ -240,7 +247,7 @@ namespace server {
 //variable length header of 1-2 bytes, followed by a fixed or variable length message.
 namespace {
 	template <typename H, typename T, std::size_t N>
-	static consteval auto message_id(std::size_t& i, bool& unique) noexcept
+	consteval auto message_id(std::size_t& i, bool& unique) noexcept
 	{
 		if constexpr (std::is_same_v<T, typename std::tuple_element_t<N, H>::message_type>) {
 			unique = i == std::tuple_size_v<H>;
@@ -249,7 +256,7 @@ namespace {
 	}
 
 	template <typename H, typename T, std::size_t... Is>
-	[[nodiscard]] static consteval auto message_id(const std::index_sequence<Is...>&) noexcept
+	[[nodiscard]] consteval auto message_id(const std::index_sequence<Is...>&) noexcept
 	{
 		auto unique = true;
 		auto i = std::tuple_size_v<H>;
@@ -259,19 +266,19 @@ namespace {
 	}
 
 	template <typename H, typename T>
-	inline constexpr auto message_id_v = message_id<H, T>(std::make_index_sequence<std::tuple_size_v<H>>());
+	constexpr auto message_id_v = message_id<H, T>(std::make_index_sequence<std::tuple_size_v<H>>());
 
 	//See if the handler signature can be invoked with a variable number of arguments. does not need to be defined.
 	template <typename H, typename T, typename Args = std::tuple<>>
 	constexpr auto is_variable_length_message = bool(data_serialization::flex_element_size_v<T, std::tuple_element_t<message_id_v<H, T>, H>, Args>);
 
 	template <typename H, typename T>
-	inline constexpr auto is_message = message_id_v<H, T> != std::tuple_size_v<H>;
+	constexpr auto is_message = message_id_v<H, T> != std::tuple_size_v<H>;
 
 	template <typename H, typename Args, common_platform::transparently_serializable T>
 	requires (is_message<H, T> and not is_variable_length_message<H, T, Args>
 	and alignof(net::header_fixed) == 1 and alignof(T) == 1 and common_platform::transparently_serializable<net::header_fixed, T>)
-	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message) noexcept
 	{
 		net::header_fixed header{}; //always initialize net types. assignment may read the current value.
 		header = message_id_v<H, T>;
@@ -287,7 +294,7 @@ namespace {
 	template <typename H, typename Args, common_platform::transparently_serializable T>
 	requires (is_message<H, T> and is_variable_length_message<H, T, Args>
 	and alignof(net::header_variable) == 1 and alignof(T) == 1 and common_platform::transparently_serializable<net::header_variable, T>)
-	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n) noexcept
 	{
 		net::header_variable header{};
 		header.id = message_id_v<H, T>;
@@ -313,10 +320,17 @@ namespace {
 	template <typename Hdr, typename T, typename F, typename Args>
 	[[nodiscard]] auto recv_message_body(Args&& args, const std::span<std::byte>& data, u8 count = u8())
 	{
+		//The size needed to call data_serialization::apply without copying.
+		//That is, the memory required to construct the minimal number of arguments to F.
 		auto size = data_serialization::apply_size_v<T, F, Args>;
+		//If F signifies that T should be interpreted as a struct with a flexible array member E at the end,
+		//This is sizeof(std::remove_extent_t<E>).
 		auto element_size = data_serialization::flex_element_size_v<T, F, Args>;
 		auto message_size = size + count * element_size;
 		if (data.size() < message_size) return std::size_t{};
+		//Where as std::apply calls F with a std::tuple, data_serialization::apply calls F constructing the elements of
+		//T in the supplied byte buffer. There is a corresponding data_serialization::invoke call which takes a parameter
+		//pack instead of a struct.
 		if (data_serialization::apply<T>(F{}, std::forward<Args>(args), data.first(message_size).data(), message_size))
 			return message_size + sizeof(Hdr);
 		return std::size_t{};
@@ -350,15 +364,21 @@ namespace {
 		return std::size_t{};
 	}
 
+	//This is a simple recursive-descent parser that looks for message = message_id [field_count] message_body,
+	//unpacks the message body, and calls the associated handler. More typical implementations might use a switch
+	//or table of function pointers instead of a tuple of functors -- this is simply illustrating another way to
+	//structure such a system.
 	template <typename H, typename Args>
 	[[nodiscard]] auto recv_message(Args&& args, const std::span<std::byte>& data)
 	{
-		if (auto header = recv_header<net::header_fixed>(data))
+		if (auto header = recv_header<net::header_fixed>(data); header and u8(*header) < std::tuple_size_v<H>)
 			return find_handler<H>(*header, std::forward<Args>(args), data);
 		return std::size_t{};
 	}
 }
 
+//Some convenience functions for the server and client to call send_message with the appropriate
+//handler table to deduce message ids and handler signatures.
 namespace server {
 	template <common_platform::transparently_serializable T>
 	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message)
@@ -384,16 +404,17 @@ namespace client {
 	}
 }
 
-//This is a toy application, so just memcpy random numbers of bytes between client/server objects to simulate networking. It's O(n^2) for sending a whole buffer
-//in the worst case, but real applications can use a bipartite buffer.
 namespace {
-	void fake_networking(server::server_context& svr, const std::span<client::user_context, 5>& usrs, std::size_t i)
+	//This is a toy application, so just memcpy random numbers of bytes between client/server objects to simulate networking. It's O(n^2) for sending a whole buffer
+	//in the worst case, but real applications can use a bipartite buffer. fake_networking simulates a reliable ordered byte stream with no explicit message boundaries
+	//similar to TCP copying a random number of bytes from output buffers on one side to input buffers on the other.
+	auto fake_tcp_networking(server::server_context& svr, const std::span<client::user_context, 5>& usrs, std::size_t i)
 	{
 		std::random_device seed;
 		std::default_random_engine engine(seed());
 		auto svr_users = std::span(svr.users);
 		{
-			std::uniform_int_distribution<std::size_t> distribution(0, std::min(usrs[i].out_size, sizeof(svr_users[i].in) - svr_users[i].in_size));
+			std::uniform_int_distribution<unsigned short> distribution(0, static_cast<unsigned short>(std::min(usrs[i].out_size, sizeof(svr_users[i].in) - svr_users[i].in_size)));
 			auto n = distribution(engine);
 			if (n)
 				std::memcpy(std::span(svr_users[i].in).subspan(svr_users[i].in_size, n).data(), usrs[i].out, n);
@@ -404,7 +425,7 @@ namespace {
 			svr_users[i].in_size += n;
 		}
 		{
-			std::uniform_int_distribution<std::size_t> distribution(0, std::min(sizeof(usrs[i].in) - usrs[i].in_size, svr_users[i].out_size));
+			std::uniform_int_distribution<unsigned short> distribution(0, static_cast<unsigned short>(std::min(sizeof(usrs[i].in) - usrs[i].in_size, svr_users[i].out_size)));
 			auto n = distribution(engine);
 			if (n)
 				std::memcpy(std::span(usrs[i].in).subspan(usrs[i].in_size, n).data(), svr_users[i].out, n);
@@ -416,7 +437,7 @@ namespace {
 		}
 	}
 
-	void try_build_new_dragon(server::server_context& svr)
+	auto try_build_new_dragon(server::server_context& svr)
 	{
 		if (svr.has_dragon) return;
 		std::random_device seed;
@@ -433,7 +454,7 @@ namespace {
 		std::for_each_n(svr.users, svr.user_size, [&](auto& usr) { usr.told_dragon = false; });
 	}
 
-	void try_tell_current_dragon(server::server_context& svr, server::user_context& usr)
+	auto try_tell_current_dragon(server::server_context& svr, server::user_context& usr)
 	{
 		if (usr.told_dragon) return;
 
@@ -445,7 +466,7 @@ namespace {
 		usr.told_dragon = server::send_message(usr.out, usr.out_size, message, svr.active_dragon.name.size() + 1);
 	}
 
-	void try_handle_network(server::server_context& svr, server::user_context& usr)
+	auto try_handle_network(server::server_context& svr, server::user_context& usr)
 	{
 		auto read = std::size_t{};
 		for (auto n = std::size_t{}; (n = recv_message<server::handlers>(std::make_tuple(&svr, &usr), std::span(usr.in, usr.in_size).subspan(read))); read += n);
@@ -455,7 +476,7 @@ namespace {
 		usr.in_size -= read;
 	}
 
-	void server_loop(server::server_context& svr)
+	auto server_loop(server::server_context& svr)
 	{
 		try_build_new_dragon(svr);
 
@@ -465,7 +486,7 @@ namespace {
 			});
 	}
 
-	void try_handle_network(client::user_context& usr)
+	auto try_handle_network(client::user_context& usr)
 	{
 		auto read = std::size_t{};
 		for (auto n = std::size_t{}; (n = recv_message<client::handlers>(std::make_tuple(&usr), std::span(usr.in, usr.in_size).subspan(read))); read += n);
@@ -475,7 +496,7 @@ namespace {
 		usr.in_size -= read;
 	}
 
-	void try_kill_current_dragon(client::user_context& usr)
+	auto try_kill_current_dragon(client::user_context& usr)
 	{
 		if (not usr.has_dragon) return;
 		std::random_device seed;
@@ -486,7 +507,7 @@ namespace {
 		client::send_message(usr.out, usr.out_size, message);
 	}
 
-	void client_loop(client::user_context& usr)
+	auto client_loop(client::user_context& usr)
 	{
 		try_handle_network(usr);
 
@@ -576,7 +597,7 @@ int main()
 
 	for (auto turn = std::size_t{}; turn < 50; ++turn) {
 		for (auto i = std::size_t{}; i < std::extent_v<decltype(usr)>; ++i)
-			fake_networking(svr, usr, i);
+			fake_tcp_networking(svr, usr, i);
 		for (auto& u : usr)
 			client_loop(u);
 		server_loop(svr);
