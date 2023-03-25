@@ -381,24 +381,24 @@ namespace {
 //handler table to deduce message ids and handler signatures.
 namespace server {
 	template <common_platform::transparently_serializable T>
-	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message) noexcept
 	{
 		return ::send_message<client::handlers, client::context>(data, size, message);
 	}
 	template <common_platform::transparently_serializable T>
-	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n) noexcept
 	{
 		return ::send_message<client::handlers, client::context>(data, size, message, n);
 	}
 }
 namespace client {
 	template <common_platform::transparently_serializable T>
-	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message) noexcept
 	{
 		return ::send_message<server::handlers, server::context>(data, size, message);
 	}
 	template <common_platform::transparently_serializable T>
-	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n)
+	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n) noexcept
 	{
 		return ::send_message<server::handlers, server::context>(data, size, message, n);
 	}
