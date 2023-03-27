@@ -192,11 +192,7 @@ namespace client {
 
 //Handlers for the server to handle client messages.
 namespace server {
-	template <typename T>
-	struct handle_message {};
-
-	template <>
-	struct handle_message<client::attack_dragon>
+	struct handle_attack_dragon
 	{
 		using message_type = client::attack_dragon;
 		bool operator()(server_context*, user_context*, const unit_id&, bool) noexcept;
@@ -205,19 +201,14 @@ namespace server {
 
 //Handlers for the client to handle server messages.
 namespace client {
-	template <typename T>
-	struct handle_message {};
-
-	template <>
-	struct handle_message<server::hatch_dragon>
+	struct handle_hatch_dragon
 	{
 		using message_type = server::hatch_dragon;
 		//changing the last type to a pointer the final member, less one extent, and adding a size_t
 		//shows that this handles a variable length message similar to C's flexible array member feature.
 		bool operator()(client::user_context*, const unit_id&, dragon_color, bool, char[], std::size_t) noexcept;
 	};
-	template <>
-	struct handle_message<server::attack_result>
+	struct handle_attack_result
 	{
 		using message_type = server::attack_result;
 		bool operator()(client::user_context*, const unit_id&, dragon_result) noexcept;
@@ -228,8 +219,8 @@ namespace client {
 //Note, in this example message ids are inferred from table order and not explicitly part of a message.
 namespace client {
 	using handlers = std::tuple<
-		handle_message<server::attack_result>,
-		handle_message<server::hatch_dragon>
+		handle_attack_result,
+		handle_hatch_dragon
 	>;
 
 	using context = std::tuple<user_context*>;
@@ -237,7 +228,8 @@ namespace client {
 
 namespace server {
 	using handlers = std::tuple<
-		handle_message<client::attack_dragon>>;
+		handle_attack_dragon
+	>;
 
 	using context = std::tuple<server::server_context*, server::user_context* >;
 }
@@ -516,7 +508,7 @@ namespace {
 }
 
 
-bool server::handle_message<client::attack_dragon>::operator()(server_context* svr, server::user_context* usr, const unit_id& id, bool arrow_or_sword) noexcept
+bool server::handle_attack_dragon::operator()(server_context* svr, server::user_context* usr, const unit_id& id, bool arrow_or_sword) noexcept
 {
 	server::attack_result message{};
 	message.id = id;
@@ -538,7 +530,7 @@ bool server::handle_message<client::attack_dragon>::operator()(server_context* s
 	return false; //note: for our RPC system, returning false says try again later. In this case we don't have resources to attack the dragon and sync the client as required.
 }
 
-bool client::handle_message<server::attack_result>::operator()(client::user_context* usr, const unit_id& id, dragon_result result) noexcept
+bool client::handle_attack_result::operator()(client::user_context* usr, const unit_id& id, dragon_result result) noexcept
 {
 	//false results indicate a bug in our stack/server. we can't continue.
 	if (result > dragon_result::last) std::terminate();
@@ -567,7 +559,7 @@ bool client::handle_message<server::attack_result>::operator()(client::user_cont
 }
 
 
-bool client::handle_message<server::hatch_dragon>::operator()(client::user_context* usr, const unit_id& id, dragon_color color, bool, char name[], std::size_t len) noexcept
+bool client::handle_hatch_dragon::operator()(client::user_context* usr, const unit_id& id, dragon_color color, bool, char name[], std::size_t len) noexcept
 {
 	//false results indicate a bug in our stack/server. we can't continue.
 	if (not len or std::span(name, len)[len - 1] or std::memchr(name, 0, len - 1) or len > sizeof(server::hatch_dragon::name)) std::terminate();
