@@ -265,6 +265,24 @@ namespace common_platform {
 	template <typename... Ts>
 	concept transparently_serializable = is_transparently_serializable_v<Ts...>;
 
+	namespace detail {
+		template <typename Tuple, std::size_t... Is>
+		[[nodiscard]] consteval auto common_alignment_pack(const std::index_sequence<Is...>&) noexcept
+		{
+			return (detail::is_transparently_serializable_element<
+				std::conditional_t<std::is_unbounded_array_v<std::tuple_element_t<Is, Tuple>>,
+				std::remove_extent_t<std::tuple_element_t<Is, Tuple>>,
+				std::tuple_element_t<Is, Tuple>>>() + ... + std::size_t{});
+		}
+	}
+
+	template <typename... Ts>
+	requires transparently_serializable<Ts...>
+	struct common_platform_alignment final : std::integral_constant<std::size_t, detail::common_alignment_pack<std::tuple<Ts...>>(std::index_sequence_for<Ts...>())> {};
+
+	template <typename... Ts>
+	inline constexpr auto common_platform_alignment_v = common_platform_alignment<Ts...>::value;
+
 	[[maybe_unused]] inline constexpr auto is_common_platform = requires
 	{
 		requires detail::common_platform_integral<std::uint_least8_t, 8>;

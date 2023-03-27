@@ -116,6 +116,8 @@ static_assert(not common_platform::is_transparently_serializable_v<B1[], T5>);
 static_assert(alignof(B1) < alignof(T1));
 static_assert(not common_platform::is_common_platform or common_platform::is_transparently_serializable_v<B1[], T1>);
 
+static_assert(not common_platform::is_common_platform or common_platform::common_platform_alignment_v<double> == 8);
+
 struct Foo {};
 
 static_assert(not type_conversion::detail::strict_alias<int, char>);
