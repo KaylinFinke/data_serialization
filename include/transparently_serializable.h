@@ -216,6 +216,17 @@ namespace common_platform {
 			return result and offset == sizeof(T) and not (offset % align) ? align : std::size_t{};
 		}
 
+		template <typename T>
+		[[nodiscard]] consteval auto align_or_integral_size() noexcept
+		{
+			auto result = true;
+			auto offset = std::size_t{};
+			auto align = std::size_t{ 1 };
+			is_transparently_serializable_type<std::remove_cvref_t<T>>{}(result, offset, align);
+			return align;
+		}
+
+
 		//This method either tracks offset within a pack of types as a std::size_t or
 		//it tracks the trailing zeroes in an object's size as an int. Objects can be
 		//at in or following a variable length array can be no stricter aligned than
@@ -269,15 +280,14 @@ namespace common_platform {
 		template <typename Tuple, std::size_t... Is>
 		[[nodiscard]] consteval auto common_alignment_pack(const std::index_sequence<Is...>&) noexcept
 		{
-			return (detail::is_transparently_serializable_element<
+			return std::max({ detail::align_or_integral_size<
 				std::conditional_t<std::is_unbounded_array_v<std::tuple_element_t<Is, Tuple>>,
 				std::remove_extent_t<std::tuple_element_t<Is, Tuple>>,
-				std::tuple_element_t<Is, Tuple>>>() + ... + std::size_t{});
+				std::tuple_element_t<Is, Tuple>>>()... });
 		}
 	}
 
 	template <typename... Ts>
-	requires transparently_serializable<Ts...>
 	struct common_platform_alignment final : std::integral_constant<std::size_t, detail::common_alignment_pack<std::tuple<Ts...>>(std::index_sequence_for<Ts...>())> {};
 
 	template <typename... Ts>

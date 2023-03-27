@@ -165,6 +165,25 @@ auto test() noexcept
 
 int main()
 {
+	if constexpr (common_platform::is_common_platform) {
+		struct TestFun
+		{
+			void operator()(std::uint_least32_t, bool) {};
+		};
+		struct TestFunT
+		{
+			std::uint_least32_t a;
+			char b;
+		};
+
+		static_assert(not common_platform::is_common_platform or data_serialization::apply_size_v<TestFunT, TestFun> == 5);
+		static_assert(not common_platform::is_common_platform or common_platform::common_platform_alignment_v<TestFunT, TestFun> == 4);
+		static_assert(not common_platform::is_common_platform or sizeof(TestFunT) == 8);
+		std::byte testbuf[5];
+		data_serialization::apply<TestFunT>(TestFun{}, testbuf, 5);
+	}
+
+
 	common_platform::bitfield<std::integral_constant<signed, 7>> f{};
 	common_platform::bitfield < common_platform::float_constant<float, 24, 8, std::uint_least32_t>> g{};
 	std::unordered_set<decltype(g)> g_set;
