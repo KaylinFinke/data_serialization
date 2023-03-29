@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <functional>
 #include <span>
 #include <tuple>
 #include <type_traits>
@@ -60,19 +61,31 @@ namespace data_serialization {
 		struct noexcept_test final : std::false_type {};
 
 		template <typename F, typename Args, typename... Ts>
+		[[nodiscard]] constexpr auto noexcept_test_helper() noexcept
+		{
+			if constexpr (sizeof...(Ts)) {
+				return [] <std::size_t... Is>(const std::index_sequence<Is...>&) {
+					std::tuple<Ts*...> ptrs;
+
+					using A = std::remove_pointer_t<std::tuple_element_t<sizeof...(Ts) - 1, decltype(ptrs)>>;
+
+					using Tuple = std::conditional_t<std::is_unbounded_array_v<A>,
+						decltype(std::tuple_cat(std::declval<Args>(), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(std::declval<std::size_t&>()))),
+						decltype(std::tuple_cat(std::declval<Args>(), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...)))>;
+
+					return noexcept(std::apply(std::declval<F&>(), std::declval<Tuple>()));
+				}(std::index_sequence_for<Ts...>());
+			}
+			else if constexpr (std::tuple_size_v<Args>)
+				return noexcept(std::apply(std::declval<F&>(), std::declval<Args>()));
+			else
+				return std::is_nothrow_invocable_v<F>;
+		}
+
+		template <typename F, typename Args, typename... Ts>
 		struct noexcept_test<F, Args, std::tuple<Ts...>> final
 		{
-			static constexpr auto value = [] <std::size_t... Is>(const std::index_sequence<Is...>&) {
-				std::tuple<Ts*...> ptrs;
-
-				using A = std::remove_pointer_t<std::tuple_element_t<sizeof...(Ts) - 1, decltype(ptrs)>>;
-
-				using Tuple = std::conditional_t<std::is_unbounded_array_v<A>,
-					decltype(std::tuple_cat(std::declval<Args>(), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...), std::forward_as_tuple(std::declval<std::size_t&>()))),
-					decltype(std::tuple_cat(std::declval<Args>(), std::forward_as_tuple((repack_element(std::get<Is>(ptrs)))...)))>;
-
-				return noexcept(std::apply(std::declval<F&>(), std::declval<Tuple>()));
-			}(std::index_sequence_for<Ts...>());
+			static constexpr auto value = noexcept_test_helper<F, Args, Ts...>();
 		};
 
 		template <typename F, typename Args, typename... Ts>
@@ -133,14 +146,33 @@ namespace data_serialization {
 		template <typename F, typename T, typename Args, typename = void>
 		struct is_unpack_invocable_flex : std::false_type {};
 
+		template <typename T>
+		concept empty_class = requires
+		{
+			requires std::is_empty_v<T>;
+			requires std::is_aggregate_v<T>;
+			requires std::is_trivial_v<T>;
+			requires std::is_standard_layout_v<T>;
+		};
+
 		template <typename Args, common_platform::detail::reflectable_class T>
 		struct unpack_invocable_tuple
 		{
 			using type = decltype(std::tuple_cat(std::declval<Args>(), std::declval<detail::tuple_of_refs<T>>()));
 		};
 
-		template <typename Args, common_platform::detail::reflectable_class T>
-		using unpack_invocable_tuple_type = unpack_invocable_tuple<Args, T>::type;
+		template <typename Args, empty_class T>
+		struct unpack_invocable_tuple<Args, T>
+		{
+			using type = decltype(std::tuple_cat(std::declval<Args>()));
+		};
+
+
+		template <typename T>
+		concept reflectable_or_empty = empty_class<T> or common_platform::detail::reflectable_class<T>;
+
+		template <typename Args, reflectable_or_empty T>
+		using unpack_invocable_tuple_type =  unpack_invocable_tuple<Args, T>::type;
 
 		template <typename Args, common_platform::detail::reflectable_class T>
 		struct unpack_invocable_flex_tuple
@@ -166,7 +198,13 @@ namespace data_serialization {
 			static constexpr auto value = unpack_invokable_args_v<F, unpack_invocable_tuple_type<Args, T>>;
 		};
 
-		template <typename F, common_platform::detail::reflectable_class T, typename Args = std::tuple<>>
+		template <typename F, empty_class T, typename Args>
+		struct is_unpack_invocable<F, T, Args, std::void_t<decltype(std::tuple_cat(std::declval<Args>()))>> final
+		{
+			static constexpr auto value = unpack_invokable_args_v<F, Args>;
+		};
+
+		template <typename F, typename T, typename Args = std::tuple<>>
 		inline constexpr auto is_unpack_invocable_v = is_unpack_invocable<F, T, Args>::value;
 
 		template <typename F, common_platform::detail::reflectable_class T, typename Args>
@@ -175,7 +213,7 @@ namespace data_serialization {
 			static constexpr auto value = unpack_invokable_args_v<F, unpack_invocable_flex_tuple_type<Args, T>>;
 		};
 
-		template <typename F, common_platform::detail::reflectable_class T, typename Args = std::tuple<>>
+		template <typename F, typename T, typename Args = std::tuple<>>
 		inline constexpr auto is_unpack_invocable_flex_v = is_unpack_invocable_flex<F, T, Args>::value;
 
 		template <typename... Ts>

@@ -176,11 +176,29 @@ int main()
 			char b;
 		};
 
+		struct TestFun2
+		{
+			void operator()() {};
+		};
+		struct TestFunArgs
+		{
+			void operator()(std::byte*) {};
+		};
+
+		struct TestFunT2
+		{
+		};
+
 		static_assert(not common_platform::is_common_platform or data_serialization::apply_size_v<TestFunT, TestFun> == 5);
 		static_assert(not common_platform::is_common_platform or common_platform::common_platform_alignment_v<TestFunT, TestFun> == 4);
 		static_assert(not common_platform::is_common_platform or sizeof(TestFunT) == 8);
 		std::byte testbuf[5];
 		data_serialization::apply<TestFunT>(TestFun{}, testbuf, 5);
+		static_assert(std::is_invocable_v<TestFun2>);
+		static_assert(data_serialization::detail::is_unpack_invocable_v<TestFun2, TestFunT2>);
+		static_assert(data_serialization::apply_size_v<TestFunT2, TestFun2> == 0);
+		data_serialization::apply<TestFunT2>(TestFun2{}, testbuf, 0);
+		data_serialization::apply<TestFunT2>(TestFunArgs{}, std::make_tuple(static_cast<std::byte*>(testbuf)), testbuf, 0);
 	}
 
 

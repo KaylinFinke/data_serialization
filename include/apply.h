@@ -28,8 +28,12 @@ namespace data_serialization {
 		requires is_unpack_invocable_v<F, T, Args>
 		[[nodiscard]] consteval auto apply_size() noexcept
 		{
-			using TT = tuple_of_refs<T>;
-			return invoke_size_pack<TT>(std::make_index_sequence<std::tuple_size_v<TT>>());
+			if constexpr (empty_class<T>) {
+				return invoke_size_pack<std::tuple<>>(std::make_index_sequence<0>());
+			} else {
+				using TT = tuple_of_refs<T>;
+				return invoke_size_pack<TT>(std::make_index_sequence<std::tuple_size_v<TT>>());
+			}
 		}
 		template <typename T, typename F, typename Args>
 		requires is_unpack_invocable_flex_v<F, T, Args>
@@ -50,11 +54,25 @@ namespace data_serialization {
 		}
 	}
 
-	template <common_platform::detail::reflectable_class T, typename F, typename Args = std::tuple<>>
+	template <typename T, typename F, typename Args = std::tuple<>>
 	inline constexpr auto apply_size_v = detail::apply_size<T, F, Args>();
 
 	template <common_platform::detail::reflectable_class T, typename F, typename Args = std::tuple<>>
 	inline constexpr auto flex_element_size_v = detail::flex_element_size<T, F, Args>();
+
+	template <detail::empty_class T, typename F>
+	requires detail::is_unpack_invocable_v<F, T>
+	[[nodiscard]] decltype(auto) apply(F&& f, std::byte* data, std::size_t size)
+	{
+		return detail::apply<F, std::tuple<>, std::tuple<>>(std::make_index_sequence<0>(), std::forward<F>(f), std::make_tuple(), data, size);
+	}
+
+	template <detail::empty_class T, typename Args, typename F>
+	requires detail::is_unpack_invocable_v<F, T, Args>
+	[[nodiscard]] decltype(auto) apply(F&& f, Args&& args, std::byte* data, std::size_t size)
+	{
+		return detail::apply<F, Args, std::tuple<>>(std::make_index_sequence<0>(), std::forward<F>(f), std::forward<Args>(args), data, size);
+	}
 
 	template <common_platform::detail::reflectable_class T, typename F>
 	requires detail::is_unpack_invocable_v<F, T>
