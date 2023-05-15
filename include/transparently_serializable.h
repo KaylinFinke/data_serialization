@@ -307,5 +307,6 @@ namespace common_platform {
 		requires detail::common_platform_float<double, 53, 11>;
 	};
 }
+
 #endif
 #endif

@@ -589,24 +589,22 @@ namespace std {
 
 	template <typename... Ts>
 	requires (common_platform::detail::is_float_bitfield_element_v<Ts> or ...)
-	struct hash<common_platform::bitfield<Ts...>> final {
-		[[nodiscard]] constexpr auto operator()(const common_platform::bitfield<Ts...>& b) const noexcept
-		{
-			return [&] <std::size_t... Is>(const std::index_sequence<Is...>&) {
-				auto hash_element = []<typename T>(auto h, T t) {
-					auto update_hash = [](auto hv, auto v) { hv ^= std::to_integer<decltype(hv)>(v); hv *= 0x100000001b3; return hv; };
-					auto v = std::hash<T>{}(t);
-					if constexpr (std::numeric_limits<decltype(v)>::digits > std::numeric_limits<unsigned char>::digits)
-						for (auto i = 0; i < std::numeric_limits<decltype(v)>::digits - std::numeric_limits<unsigned char>::digits; i += std::numeric_limits<unsigned char>::digits, v >>= std::numeric_limits<unsigned char>::digits)
-							h = update_hash(h, std::byte(v));
-					return update_hash(h, std::byte(v));
-				};
-				auto hv = UINT64_C(0xcbf29ce484222325);
-				((hv = hash_element(hv, b. template get<Is>())), ...);
-				return hv;
-			}(std::index_sequence_for<Ts...>());
-		}
-	};
+	struct hash<common_platform::bitfield<Ts...>> final { [[nodiscard]] constexpr auto operator()(const common_platform::bitfield<Ts...>& b) const noexcept
+	{
+		return [&] <std::size_t... Is>(const std::index_sequence<Is...>&) {
+			auto hash_element = []<typename T>(auto h, T t) {
+				auto update_hash = [](auto hv, auto v) { hv ^= std::to_integer<decltype(hv)>(v); hv *= 0x100000001b3; return hv; };
+				auto v = std::hash<T>{}(t);
+				if constexpr (std::numeric_limits<decltype(v)>::digits > std::numeric_limits<unsigned char>::digits)
+					for (auto i = 0; i < std::numeric_limits<decltype(v)>::digits - std::numeric_limits<unsigned char>::digits; i += std::numeric_limits<unsigned char>::digits, v >>= std::numeric_limits<unsigned char>::digits)
+						h = update_hash(h, std::byte(v));
+				return update_hash(h, std::byte(v));
+			};
+			auto hv = UINT64_C(0xcbf29ce484222325);
+			((hv = hash_element(hv, b. template get<Is>())), ...);
+			return hv;
+		}(std::index_sequence_for<Ts...>());
+	}};
 }
 
 #endif

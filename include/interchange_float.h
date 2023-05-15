@@ -27,7 +27,7 @@ namespace data_serialization {
 
 			requires std::integral<I>;
 			requires std::has_unique_object_representations_v<I>;
-			requires sizeof(I)* std::numeric_limits<unsigned char>::digits == M + E;
+			requires sizeof(I) * std::numeric_limits<unsigned char>::digits == M + E;
 			requires std::numeric_limits<I>::is_integer;
 			requires (std::numeric_limits<I>::digits == M + E and std::unsigned_integral<I>)
 			or (std::numeric_limits<I>::digits + 1 == M + E and std::signed_integral<I>);
@@ -156,7 +156,7 @@ namespace data_serialization {
 
 				if (e > e_max)
 					t = e_mask;
-				else if (!t or e < e_min)
+				else if (not t or e < e_min)
 					t = 0;
 				else if (e > -b + 1) {
 					t &= m_mask;
@@ -167,7 +167,7 @@ namespace data_serialization {
 				t = e_mask;
 			if (std::isnan(f)) t |= q_bit;
 			if (std::signbit(f)) t |= s_mask;
-			return static_cast<T>(t);
+			return t;
 		}
 	}
 
@@ -212,5 +212,6 @@ namespace data_serialization {
 		return from_float<T, 53, 11>(f);
 	}
 }
+
 #endif
 #endif

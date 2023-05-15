@@ -106,5 +106,6 @@ namespace data_serialization {
 		return detail::apply<F, Args, TT>(std::make_index_sequence<std::tuple_size_v<TT>>(), std::forward<F>(f), std::forward<Args>(args), data, size);
 	}
 }
+
 #endif
 #endif

@@ -273,5 +273,6 @@ namespace data_serialization {
 		return detail::invoke<F, Args, Ts...>(std::index_sequence_for<Ts...>(), std::forward<F>(f), std::forward<Args>(args), data, sizeof(data));
 	}
 }
+
 #endif
 #endif
