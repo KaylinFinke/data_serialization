@@ -458,14 +458,14 @@ namespace common_platform {
 		requires (N < sizeof...(Ts))
 		[[nodiscard]] constexpr auto get() const noexcept
 		{
-			return field_proxy<N, const bitfield>{this};
+			return get_value<N>();
 		}
 
 		template <typename T>
 		requires (type_index<T> not_eq sizeof...(Ts))
 		[[nodiscard]] constexpr auto get() const noexcept
 		{
-			return field_proxy<type_index<T>, const bitfield>{this};
+			return get_value<type_index<T>>();
 		}
 
 		template <std::size_t N>
