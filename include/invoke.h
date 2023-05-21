@@ -155,8 +155,11 @@ namespace data_serialization {
 			requires std::is_standard_layout_v<T>;
 		};
 
+		template <typename Args, typename T>
+		struct unpack_invocable_tuple {};
+
 		template <typename Args, common_platform::detail::reflectable_class T>
-		struct unpack_invocable_tuple
+		struct unpack_invocable_tuple<Args, T>
 		{
 			using type = decltype(std::tuple_cat(std::declval<Args>(), std::declval<detail::tuple_of_refs<T>>()));
 		};
@@ -172,7 +175,7 @@ namespace data_serialization {
 		concept reflectable_or_empty = empty_class<T> or common_platform::detail::reflectable_class<T>;
 
 		template <typename Args, reflectable_or_empty T>
-		using unpack_invocable_tuple_type =  unpack_invocable_tuple<Args, T>::type;
+		using unpack_invocable_tuple_type = unpack_invocable_tuple<Args, T>::type;
 
 		template <typename Args, common_platform::detail::reflectable_class T>
 		struct unpack_invocable_flex_tuple

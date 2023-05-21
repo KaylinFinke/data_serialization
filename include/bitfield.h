@@ -393,6 +393,27 @@ namespace common_platform {
 			}
 		}
 
+		template <std::size_t N, typename B>
+		struct field_proxy
+		{
+			B* b;
+			using value_type = runtime_type<N>;
+			[[nodiscard]] constexpr operator value_type() const noexcept
+			{
+				return b-> template get_value<N>();
+			}
+			constexpr decltype(auto) operator=(value_type value) noexcept
+			{
+				b-> template set_value<N>(value);
+				return *this;
+			}
+			constexpr decltype(auto) operator=(value_type value) const noexcept
+			{
+				b-> template set_value<N>(value);
+				return *this;
+			}
+		};
+
 	public:
 		//NOTE: Alignment does not change the layout of the bitfield, instead larger alignment allows 
 		// potentially faster access using aligned load/store on some platforms. Native bitfields are
@@ -405,7 +426,7 @@ namespace common_platform {
 
 		template <std::size_t N>
 		requires (N < sizeof...(Ts))
-		constexpr auto set(const runtime_type<N>& value) noexcept
+		constexpr auto set_value(const runtime_type<N>& value) noexcept
 		{
 			if constexpr (std::is_floating_point_v<runtime_type<N>>) set_integral<N>(data_serialization::from_float<int_type<N>, m_bits<N>, e_bits<N>>(value));
 			else set_integral<N>(value);
@@ -413,14 +434,14 @@ namespace common_platform {
 
 		template <typename T>
 		requires (type_index<T> not_eq sizeof...(Ts))
-		constexpr auto set(const T& value) noexcept
+		constexpr auto set_value(const T& value) noexcept
 		{
-			set<type_index<T>>(value);
+			set_value<type_index<T>>(value);
 		}
 
 		template <std::size_t N>
 		requires (N < sizeof...(Ts))
-		[[nodiscard]] constexpr auto get() const noexcept
+		[[nodiscard]] constexpr auto get_value() const noexcept
 		{
 			if constexpr (std::is_floating_point_v<runtime_type<N>>) return data_serialization::to_float<runtime_type<N>, m_bits<N>, e_bits<N>>(get_integral<N>());
 			else return get_integral<N>();
@@ -428,29 +449,57 @@ namespace common_platform {
 
 		template <typename T>
 		requires (type_index<T> not_eq sizeof...(Ts))
+		[[nodiscard]] constexpr auto get_value() const noexcept
+		{
+			return get_value<type_index<T>>();
+		}
+
+		template <std::size_t N>
+		requires (N < sizeof...(Ts))
 		[[nodiscard]] constexpr auto get() const noexcept
 		{
-			return get<type_index<T>>();
+			return field_proxy<N, const bitfield>{this};
+		}
+
+		template <typename T>
+		requires (type_index<T> not_eq sizeof...(Ts))
+		[[nodiscard]] constexpr auto get() const noexcept
+		{
+			return field_proxy<type_index<T>, const bitfield>{this};
+		}
+
+		template <std::size_t N>
+		requires (N < sizeof...(Ts))
+		[[nodiscard]] constexpr auto get() noexcept
+		{
+			return field_proxy<N, bitfield>{this};
+		}
+
+		template <typename T>
+		requires (type_index<T> not_eq sizeof...(Ts))
+		[[nodiscard]] constexpr auto get() noexcept
+		{
+			return field_proxy<type_index<T>, bitfield>{this};
 		}
 
 		template <typename T = runtime_type<0>>
 		requires (sizeof...(Ts) == 1 and std::same_as<T, runtime_type<0>>)
 		[[nodiscard]] constexpr operator T() const noexcept
 		{
-			return get<0>();
+			return get_value<0>();
 		}
 
 		constexpr auto operator=(runtime_type<0>&& t) noexcept
 		{
 			static_assert(sizeof...(Ts) == 1);
-			set(t);
+			set_value(t);
 			return t;
 		}
 
 		constexpr auto operator=(const runtime_type<0>& t) noexcept
 		{
 			static_assert(sizeof...(Ts) == 1);
-			set(t);
+			set_value(t);
 			return t;
 		}
 
@@ -530,7 +579,7 @@ namespace common_platform {
 		return[]<std::size_t... Is>(const std::index_sequence<Is...>&, const auto& l, const auto& r)
 		{
 			auto o = std::strong_ordering::equal;
-			((o = o == std::strong_ordering::equal ? l.template get<Is>() <=> r.template get<Is>() : o), ...);
+			((o = o == std::strong_ordering::equal ? l.template get_value<Is>() <=> r.template get_value<Is>() : o), ...);
 			return o;
 		}(std::index_sequence_for<Ts...>(), a, b);
 	}
@@ -549,7 +598,7 @@ namespace common_platform {
 		return[]<std::size_t... Is>(const std::index_sequence<Is...>&, const auto & l, const auto & r)
 		{
 			auto o = std::partial_ordering::equivalent;
-			((o = o == std::partial_ordering::equivalent ? l.template get<Is>() <=> r.template get<Is>() : o), ...);
+			((o = o == std::partial_ordering::equivalent ? l.template get_value<Is>() <=> r.template get_value<Is>() : o), ...);
 			return o;
 		}(std::index_sequence_for<Ts...>(), a, b);
 	}
@@ -601,7 +650,7 @@ namespace std {
 				return update_hash(h, std::byte(v));
 			};
 			auto hv = UINT64_C(0xcbf29ce484222325);
-			((hv = hash_element(hv, b. template get<Is>())), ...);
+			((hv = hash_element(hv, b. template get_value<Is>())), ...);
 			return hv;
 		}(std::index_sequence_for<Ts...>());
 	}};

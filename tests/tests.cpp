@@ -55,33 +55,33 @@ using B = common_platform::bitfield<Ts...>;
 static_assert(common_platform::transparently_serializable<u8> and std::numeric_limits<u8>::digits == 8);
 
 static constexpr auto field1 = common_platform::bitfield<std::integral_constant<signed, 7>>{ { {std::byte{0x7B} } } };
-static_assert(field1.get<0>() == -5); //signed fast path rank < int at 0.
+static_assert(field1.get_value<0>() == -5); //signed fast path rank < int at 0.
 [[maybe_unused]] static int x = field1;
 static_assert(sizeof(field1) == 1);
 static constexpr auto field2 = common_platform::bitfield<std::integral_constant<bool, 1>, std::integral_constant<signed, 7>>{ { { std::byte{0xF6} } } };
-static_assert(field2.get<1>() == -5); //signed fast path rank < int not at 0.
-static_assert(field2.get<0>() == false); //boolean type.
+static_assert(field2.get_value<1>() == -5); //signed fast path rank < int not at 0.
+static_assert(field2.get_value<0>() == false); //boolean type.
 static_assert(sizeof(field2) == 1);
 static constexpr auto field3 = common_platform::bitfield<std::integral_constant<int, 4>, std::integral_constant<signed long long, 62>>{ { { std::byte{0xA0}, std::byte{0xBA}, std::byte{0xCB}, std::byte{0xDC}, std::byte{0xED}, std::byte{0xFE}, std::byte{0xAF}, std::byte{0xAA}, std::byte{0x0A} } } };
-static_assert(field3.get<1>() == static_cast<signed long long int>(0xEAAAFFEEDDCCBBAA) << (std::numeric_limits<unsigned long long int>::digits - 62) >> (std::numeric_limits<unsigned long long int>::digits - 62));
+static_assert(field3.get_value<1>() == static_cast<signed long long int>(0xEAAAFFEEDDCCBBAA) << (std::numeric_limits<unsigned long long int>::digits - 62) >> (std::numeric_limits<unsigned long long int>::digits - 62));
 static constexpr auto field4 = common_platform::bitfield<std::integral_constant<unsigned, 16>, std::integral_constant<signed, 8>, std::integral_constant<unsigned, 32>>{ { { std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44}, std::byte{0x55}, std::byte{0x66}, std::byte{0x77} } } };
-static_assert(field4.get<0>() == 0x2211); //multibyte fast path
-static_assert(field4.get<1>() == 0x33); //single byte fast path
-static_assert(field4.get<2>() == 0x77665544); //unaligned field.
+static_assert(field4.get_value<0>() == 0x2211); //multibyte fast path
+static_assert(field4.get_value<1>() == 0x33); //single byte fast path
+static_assert(field4.get_value<2>() == 0x77665544); //unaligned field.
 static constexpr auto field5 = common_platform::bitfield<std::integral_constant<int, 4>, std::integral_constant<unsigned long long, 60>>{ { { std::byte{0xA0}, std::byte{0xBA}, std::byte{0xCB}, std::byte{0xDC}, std::byte{0xED}, std::byte{0xFE}, std::byte{0xAF}, std::byte{0xAA} } } };
-static_assert(field5.get<1>() == static_cast<unsigned long long int>(0xAAAFFEEDDCCBBAA));
+static_assert(field5.get_value<1>() == static_cast<unsigned long long int>(0xAAAFFEEDDCCBBAA));
 static constexpr auto field6 = common_platform::bitfield<std::integral_constant<int, 2>, std::integral_constant<unsigned long long int, 63>>{ { { std::byte{0xA0}, std::byte{0xBA}, std::byte{0xCB}, std::byte{0xDC}, std::byte{0xED}, std::byte{0xFE}, std::byte{0xAF}, std::byte{0xAA} } } };
-static_assert(field6.get<1>() == static_cast<unsigned long long int>(0xAAAFFEEDDCCBBAA0 >> 2));
-static constexpr auto field7 = [] { std::remove_const_t<decltype(field1)> f7{}; f7.set<0>(-5); return f7; }();
+static_assert(field6.get_value<1>() == static_cast<unsigned long long int>(0xAAAFFEEDDCCBBAA0 >> 2));
+static constexpr auto field7 = [] { std::remove_const_t<decltype(field1)> f7{}; f7.set_value<0>(-5); return f7; }();
 static_assert(field7 == field1);
-static constexpr auto field8 = [] { std::remove_const_t<decltype(field2)> f8{}; f8.set<1>(-5); return f8; }();
+static constexpr auto field8 = [] { std::remove_const_t<decltype(field2)> f8{}; f8.set_value<1>(-5); return f8; }();
 static_assert(field8 == field2);
-static constexpr auto field9 = [x = field3.get<1>()] { std::remove_const_t<decltype(field3)> f9{}; f9.set<1>(x); f9.s[8] |= std::byte{ 0x08 };  return f9; }();
+static constexpr auto field9 = [x = field3.get_value<1>()] { std::remove_const_t<decltype(field3)> f9{}; f9.set_value<1>(x); f9.s[8] |= std::byte{ 0x08 };  return f9; }();
 static_assert(field9 == field3);
 static constexpr auto field10 = common_platform::bitfield<std::integral_constant<signed, 7>>{ { {std::byte{5} } } };
 static_assert(field10 > field1);
 static constexpr auto field11 = common_platform::bitfield < std::integral_constant<bool, 1>, std::integral_constant < std::byte, std::byte{ 7 } >> { { { std::byte{ 0xF6 } } } };
-static_assert(std::to_integer<int>(field11.get<1>()) == (-5 & 0x7F));
+static_assert(std::to_integer<int>(field11.get_value<1>()) == (-5 & 0x7F));
 
 static_assert(not common_platform::is_transparently_serializable_v<bool>);
 static_assert(not common_platform::is_common_platform or common_platform::is_transparently_serializable_v<i32>);
@@ -105,8 +105,8 @@ struct T6 { alignas(4) struct { u16 a[2]; } a; u32 b; };
 static_assert(not common_platform::is_common_platform or common_platform::is_transparently_serializable_v<T6>);
 struct T7 { struct { alignas(4) u16 a[2]; } a; u32 b; };
 static_assert(not common_platform::is_common_platform or common_platform::is_transparently_serializable_v<T7>);
-static_assert(std::is_same_v<decltype(std::declval<B1&>().get<i64>()), i64>);
-static_assert(std::is_void_v<decltype(std::declval<B1&>().set(i16{})) > );
+static_assert(std::is_same_v<decltype(std::declval<B1&>().get_value<i64>()), i64>);
+static_assert(std::is_void_v<decltype(std::declval<B1&>().set_value(i16{})) > );
 
 static_assert(not common_platform::is_common_platform or common_platform::is_transparently_serializable_v<T5, T6>);
 static_assert(not common_platform::is_common_platform or common_platform::is_transparently_serializable_v<T5, T6[]>);
@@ -168,7 +168,7 @@ int main()
 	if constexpr (common_platform::is_common_platform) {
 		struct TestFun
 		{
-			void operator()(std::uint_least32_t, bool) {};
+			void operator()(std::uint_least32_t, bool) {}
 		};
 		struct TestFunT
 		{
@@ -178,11 +178,11 @@ int main()
 
 		struct TestFun2
 		{
-			void operator()() {};
+			void operator()() {}
 		};
 		struct TestFunArgs
 		{
-			void operator()(std::byte*) {};
+			void operator()(std::byte*) {}
 		};
 
 		struct TestFunT2
@@ -210,19 +210,23 @@ int main()
 	f = signed(-5);
 	std::unordered_set<B1> u;
 	u.emplace(B1{});
-	u.emplace([] {B1 b{}; b.set<0>(1); return b; }());
+	u.emplace([] {B1 b{}; b.set_value<0>(1); return b; }());
 
 	std::set<B1> m;
 	m.emplace(B1{});
-	m.emplace([] {B1 b{}; b.set<0>(1); return b; }());
-	m.emplace([] {B1 b{}; b.set<0>(-1); return b; }());
+	m.emplace([] {B1 b{}; b.set_value<0>(1); return b; }());
+	m.emplace([] {B1 b{}; b.set_value<0>(-1); return b; }());
 
 	assert(m.size() == 3);
 	assert(u.size() == 2);
-	assert(m.begin()->get<0>() == -1);
-	assert(std::next(m.begin(), 2)->get<0>() == 1);
-	assert(u.contains([] {B1 b{}; b.set<0>(1); return b; }()));
+	assert(m.begin()->get_value<0>() == -1);
+	assert(std::next(m.begin(), 2)->get_value<0>() == 1);
+	assert(u.contains([] {B1 b{}; b.set_value<0>(1); return b; }()));
 	assert(u.contains(B1{}));
+
+	assert(f.get<0>() == -5);
+	f.get<0>() = -3;
+	assert(signed(f.get<0>()) == -3);
 
 	test<common_platform::bitfield<U32<32>>, common_platform::bitfield<common_platform::float_constant<float, 24, 8, u32>>[]>();
 

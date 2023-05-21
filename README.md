@@ -50,13 +50,13 @@ For native sized types on common platforms bitfield generates identical assembly
 //1 bit for a bool, followed by 5 bits as an int_least16_t, followed by enough bits to make a multiple of CHAR_BIT.
 common_platform::bitfield<std::integral_constant<bool, 1>, std::integral_constant<std::int_least16_t, 5>> x{};
 //type based accesors work if the types are unique. note enums are distinct types.
-x.set<bool>(true); 
-x.set<std::int_least16_t>(-3);
+x.set_value<bool>(true); 
+x.set_value<std::int_least16_t>(-3);
 //index based accessors similar to std::tuple also work.
-assert(x.get<1>() == -3);
+assert(x.get_value<1>() == -3);
 enum { valid, slot };
 //you can define a nice enum to give indices descriptive names if you like.
-assert(x.get<valid>());
+assert(x.get_value<valid>());
 ```
 
 # type_conversion::strict_alias_cast
