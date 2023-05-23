@@ -456,30 +456,58 @@ namespace common_platform {
 
 		template <std::size_t N>
 		requires (N < sizeof...(Ts))
-		[[nodiscard]] constexpr auto get() const noexcept
+		[[nodiscard]] constexpr auto get() const & noexcept
 		{
 			return get_value<N>();
 		}
 
 		template <typename T>
 		requires (type_index<T> not_eq sizeof...(Ts))
-		[[nodiscard]] constexpr auto get() const noexcept
+		[[nodiscard]] constexpr auto get() const & noexcept
 		{
 			return get_value<type_index<T>>();
 		}
 
 		template <std::size_t N>
 		requires (N < sizeof...(Ts))
-		[[nodiscard]] constexpr auto get() noexcept
+		[[nodiscard]] constexpr auto get() const && noexcept
+		{
+			return get_value<N>();
+		}
+
+		template <typename T>
+		requires (type_index<T> not_eq sizeof...(Ts))
+		[[nodiscard]] constexpr auto get() const && noexcept
+		{
+			return get_value<type_index<T>>();
+		}
+
+		template <std::size_t N>
+		requires (N < sizeof...(Ts))
+		[[nodiscard]] constexpr auto get() & noexcept
 		{
 			return field_proxy<N, bitfield>{this};
 		}
 
 		template <typename T>
 		requires (type_index<T> not_eq sizeof...(Ts))
-		[[nodiscard]] constexpr auto get() noexcept
+		[[nodiscard]] constexpr auto get() & noexcept
 		{
 			return field_proxy<type_index<T>, bitfield>{this};
+		}
+
+		template <std::size_t N>
+		requires (N < sizeof...(Ts))
+		[[nodiscard]] constexpr auto get() && noexcept
+		{
+			return get_value<N>();
+		}
+
+		template <typename T>
+		requires (type_index<T> not_eq sizeof...(Ts))
+		[[nodiscard]] constexpr auto get() && noexcept
+		{
+			return get_value<type_index<T>>();
 		}
 
 		template <typename T = runtime_type<0>>
@@ -489,14 +517,14 @@ namespace common_platform {
 			return get_value<0>();
 		}
 
-		constexpr auto operator=(runtime_type<0>&& t) noexcept
+		constexpr auto operator=(runtime_type<0>&& t) & noexcept
 		{
 			static_assert(sizeof...(Ts) == 1);
 			set_value(t);
 			return t;
 		}
 
-		constexpr auto operator=(const runtime_type<0>& t) noexcept
+		constexpr auto operator=(const runtime_type<0>& t) & noexcept
 		{
 			static_assert(sizeof...(Ts) == 1);
 			set_value(t);
