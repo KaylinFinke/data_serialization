@@ -1,4 +1,5 @@
-#include "apply.h"
+#include "zero_cost_serialization/apply.h"
+#include "zero_cost_serialization/bitfield.h"
 #include <cstring>
 #include <random>
 #include <span>
@@ -24,8 +25,8 @@ using i64 = std::int_least64_t;
 using f32 = float;
 using f64 = double;
 
-//define some types that are transparently serializable on any platform with 8 bit chars.
-//You can pack more than one field in a common_platform::bitfield but this way fields are
+//define some types that are serializable on any platform with 8 bit chars.
+//You can pack more than one field in a zero_cost_serialization::bitfield but this way fields are
 //individually addressable on all platforms at the cost of not having the same representation
 //on platforms that don't support 8 bit chars. For this simple example, we choose to simply
 //compile time assert this is the case.
@@ -42,23 +43,23 @@ namespace net {
 	using i32_tag = std::integral_constant<::i32, 32>;
 	using i64_tag = std::integral_constant<::i64, 64>;
 
-	using f32_tag = common_platform::float_constant<::f32, 24, 8, ::u32>;
-	using f64_tag = common_platform::float_constant<::f64, 53, 11, ::u64>;
+	using f32_tag = zero_cost_serialization::float_constant<::f32, 24, 8, ::u32>;
+	using f64_tag = zero_cost_serialization::float_constant<::f64, 53, 11, ::u64>;
 
-	using flag = common_platform::bitfield<flag_tag>;
+	using flag = zero_cost_serialization::bitfield<flag_tag>;
 
-	using u8 = common_platform::bitfield<u8_tag>;
-	using u16 = common_platform::bitfield<u16_tag>;
-	using u32 = common_platform::bitfield<u32_tag>;
-	using u64 = common_platform::bitfield<u64_tag>;
+	using u8 = zero_cost_serialization::bitfield<u8_tag>;
+	using u16 = zero_cost_serialization::bitfield<u16_tag>;
+	using u32 = zero_cost_serialization::bitfield<u32_tag>;
+	using u64 = zero_cost_serialization::bitfield<u64_tag>;
 
-	using i8 = common_platform::bitfield<i8_tag>;
-	using i16 = common_platform::bitfield<i16_tag>;
-	using i32 = common_platform::bitfield<i32_tag>;
-	using i64 = common_platform::bitfield<i64_tag>;
+	using i8 = zero_cost_serialization::bitfield<i8_tag>;
+	using i16 = zero_cost_serialization::bitfield<i16_tag>;
+	using i32 = zero_cost_serialization::bitfield<i32_tag>;
+	using i64 = zero_cost_serialization::bitfield<i64_tag>;
 
-	using f32 = common_platform::bitfield<f32_tag>;
-	using f64 = common_platform::bitfield<f64_tag>;
+	using f32 = zero_cost_serialization::bitfield<f32_tag>;
+	using f64 = zero_cost_serialization::bitfield<f64_tag>;
 
 	//some headers, depending on if our message is fixed size or variable length.
 	//our protocol is either a fixed or variable length header, followed by a fixed size
@@ -71,12 +72,12 @@ namespace net {
 	};
 }
 
-//You can use any type that has a common representation directly on your platforms, 
-//but be sure to check it's the right size using numeric_limits and account for alignment requirements.
-//it's much easier to just use the bitfield class, which is what net:: types are in this example. This is
-//a type we'll use in our example protocol.
-static_assert(std::numeric_limits<u8>::digits == 8);
-static_assert(common_platform::is_transparently_serializable_v<u8>);
+//You can use any type that has a 8/16/32/64 bit int or binary IEEE754 32/64 bit float representation 
+//directly on your platforms, but be sure to check it's the right size using numeric_limits and account
+//for alignment requirements. it's much easier to just use the bitfield class, which is what 
+//net:: types are in this example. This is a type we'll use in our example protocol.
+static_assert(std::numeric_limits<unsigned char>::digits == 8);
+static_assert(zero_cost_serialization::is_serializable_v<u8>);
 struct unit_id { u8 guid[16]; auto operator<=>(const unit_id&) const = default; };
 
 //Some enumerations and their portably networkable variants. Take care to set an underlying type.
@@ -105,8 +106,8 @@ enum class dragon_result : u32 {
 //an entire byte, but it doesn't take up 4.
 namespace net
 {
-	using dragon_color = common_platform::bitfield < std::integral_constant < ::dragon_color, ::dragon_color{ 16 } >> ;
-	using dragon_result = common_platform::bitfield < std::integral_constant < ::dragon_result, ::dragon_result{ 2 } >> ;
+	using dragon_color = zero_cost_serialization::bitfield < std::integral_constant < ::dragon_color, ::dragon_color{ 16 } >> ;
+	using dragon_result = zero_cost_serialization::bitfield < std::integral_constant < ::dragon_result, ::dragon_result{ 2 } >> ;
 }
 
 //Define server and client runtime representations of a dragon.
@@ -139,8 +140,6 @@ namespace server {
 		//A net::dragon_color is exactly like a dragon_color but has a 1 byte alignment requirement.
 		net::dragon_color color;
 		net::flag can_fly;
-		//We checked chars are 8 bits above, but to be pedantic let's check it also has a common representation.
-		static_assert(common_platform::is_transparently_serializable_v<char>);
 		char name[16];
 	};
 
@@ -262,14 +261,14 @@ namespace {
 
 	//See if the handler signature can be invoked with a variable number of arguments. does not need to be defined.
 	template <typename H, typename T, typename Args = std::tuple<>>
-	constexpr auto is_variable_length_message = bool(data_serialization::flex_element_size_v<T, std::tuple_element_t<message_id_v<H, T>, H>, Args>);
+	constexpr auto is_variable_length_message = bool(zero_cost_serialization::flex_element_size_v<T, std::tuple_element_t<message_id_v<H, T>, H>, Args>);
 
 	template <typename H, typename T>
 	constexpr auto is_message = message_id_v<H, T> != std::tuple_size_v<H>;
 
-	template <typename H, typename Args, common_platform::transparently_serializable T>
+	template <typename H, typename Args, zero_cost_serialization::serializable T>
 	requires (is_message<H, T> and not is_variable_length_message<H, T, Args>
-	and alignof(net::header_fixed) == 1 and alignof(T) == 1 and common_platform::transparently_serializable<net::header_fixed, T>)
+	and alignof(net::header_fixed) == 1 and alignof(T) == 1 and zero_cost_serialization::serializable<net::header_fixed, T>)
 	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message) noexcept
 	{
 		net::header_fixed header{}; //always initialize net types. assignment may read the current value.
@@ -283,16 +282,16 @@ namespace {
 		return true;
 	}
 
-	template <typename H, typename Args, common_platform::transparently_serializable T>
+	template <typename H, typename Args, zero_cost_serialization::serializable T>
 	requires (is_message<H, T> and is_variable_length_message<H, T, Args>
-	and alignof(net::header_variable) == 1 and alignof(T) == 1 and common_platform::transparently_serializable<net::header_variable, T>)
+	and alignof(net::header_variable) == 1 and alignof(T) == 1 and zero_cost_serialization::serializable<net::header_variable, T>)
 	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n) noexcept
 	{
 		net::header_variable header{};
 		header.id = message_id_v<H, T>;
 		header.count = u8(n);
 		using handler = std::tuple_element_t<message_id_v<H, T>, H>;
-		auto vsize = data_serialization::flex_element_size_v<T, handler, Args> * n + data_serialization::apply_size_v<T, handler, Args>;
+		auto vsize = zero_cost_serialization::flex_element_size_v<T, handler, Args> * n + zero_cost_serialization::apply_size_v<T, handler, Args>;
 
 		if (sizeof(data) - size < sizeof(header) + vsize) return false;
 
@@ -306,24 +305,24 @@ namespace {
 	[[nodiscard]] auto recv_header(const std::span<std::byte>& data)
 	{
 		if (data.size() < sizeof(T)) return static_cast<T*>(nullptr);
-		return type_conversion::reinterpret_memory<T>(data.first(sizeof(T)).data(), sizeof(T));
+		return zero_cost_serialization::reinterpret_memory<T>(data.first(sizeof(T)).data(), sizeof(T));
 	}
 
 	template <typename Hdr, typename T, typename F, typename Args>
 	[[nodiscard]] auto recv_message_body(Args&& args, const std::span<std::byte>& data, u8 count = u8())
 	{
-		//The size needed to call data_serialization::apply without copying.
+		//The size needed to call zero_cost_serialization::apply without copying.
 		//That is, the memory required to construct the minimal number of arguments to F.
-		constexpr auto size = data_serialization::apply_size_v<T, F, Args>;
+		constexpr auto size = zero_cost_serialization::apply_size_v<T, F, Args>;
 		//If F signifies that T should be interpreted as a struct with a flexible array member E at the end,
 		//This is sizeof(std::remove_extent_t<E>).
-		constexpr auto element_size = data_serialization::flex_element_size_v<T, F, Args>;
+		constexpr auto element_size = zero_cost_serialization::flex_element_size_v<T, F, Args>;
 		auto message_size = size + count * element_size;
 		if (data.size() < message_size) return std::size_t{};
-		//Where as std::apply calls F with a std::tuple, data_serialization::apply calls F constructing the elements of
-		//T in the supplied byte buffer. There is a corresponding data_serialization::invoke call which takes a parameter
+		//Where as std::apply calls F with a std::tuple, zero_cost_serialization::apply calls F constructing the elements of
+		//T in the supplied byte buffer. There is a corresponding zero_cost_serialization::invoke call which takes a parameter
 		//pack instead of a struct.
-		if (data_serialization::apply<T>(F{}, std::forward<Args>(args), data.first(message_size).data(), message_size))
+		if (zero_cost_serialization::apply<T>(F{}, std::forward<Args>(args), data.first(message_size)))
 			return message_size + sizeof(Hdr);
 		return std::size_t{};
 	}
@@ -333,7 +332,7 @@ namespace {
 	{
 		using F = std::tuple_element_t<ID, H>;
 		using T = typename F::message_type;
-		using Hdr = std::conditional_t<bool(data_serialization::flex_element_size_v<T, F, Args>), net::header_variable, net::header_fixed>;
+		using Hdr = std::conditional_t<bool(zero_cost_serialization::flex_element_size_v<T, F, Args>), net::header_variable, net::header_fixed>;
 		if (auto header = recv_header<Hdr>(data)) {
 			if constexpr (std::is_same_v<Hdr, net::header_variable>)
 				return recv_message_body<Hdr, T, F>(std::forward<Args>(args), data.subspan(sizeof(Hdr)), header->count);
@@ -372,24 +371,24 @@ namespace {
 //Some convenience functions for the server and client to call send_message with the appropriate
 //handler table to deduce message ids and handler signatures.
 namespace server {
-	template <common_platform::transparently_serializable T>
+	template <zero_cost_serialization::serializable T>
 	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message) noexcept
 	{
 		return ::send_message<client::handlers, client::context>(data, size, message);
 	}
-	template <common_platform::transparently_serializable T>
+	template <zero_cost_serialization::serializable T>
 	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n) noexcept
 	{
 		return ::send_message<client::handlers, client::context>(data, size, message, n);
 	}
 }
 namespace client {
-	template <common_platform::transparently_serializable T>
+	template <zero_cost_serialization::serializable T>
 	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message) noexcept
 	{
 		return ::send_message<server::handlers, server::context>(data, size, message);
 	}
-	template <common_platform::transparently_serializable T>
+	template <zero_cost_serialization::serializable T>
 	auto send_message(std::byte (&data)[1024], std::size_t& size, const T& message, std::size_t n) noexcept
 	{
 		return ::send_message<server::handlers, server::context>(data, size, message, n);
@@ -461,10 +460,10 @@ namespace {
 	auto try_handle_network(server::server_context& svr, server::user_context& usr)
 	{
 		auto read = std::size_t{};
-		for (auto n = std::size_t{}; (n = recv_message<server::handlers>(std::make_tuple(&svr, &usr), std::span(usr.in, usr.in_size).subspan(read))); read += n);
+		for (auto n = std::size_t{}; (n = recv_message<server::handlers>(std::make_tuple(&svr, &usr), std::span(usr.in).first(usr.in_size).subspan(read))); read += n);
 
 		if (read != usr.in_size and read)
-			std::memmove(usr.in, std::span(usr.in, usr.in_size).subspan(read, usr.in_size - read).data(), usr.in_size - read);
+			std::memmove(usr.in, std::span(usr.in).first(usr.in_size).subspan(read, usr.in_size - read).data(), usr.in_size - read);
 		usr.in_size -= read;
 	}
 
@@ -481,10 +480,10 @@ namespace {
 	auto try_handle_network(client::user_context& usr)
 	{
 		auto read = std::size_t{};
-		for (auto n = std::size_t{}; (n = recv_message<client::handlers>(std::make_tuple(&usr), std::span(usr.in, usr.in_size).subspan(read))); read += n);
+		for (auto n = std::size_t{}; (n = recv_message<client::handlers>(std::make_tuple(&usr), std::span(usr.in).first(usr.in_size).subspan(read))); read += n);
 
 		if (read != usr.in_size and read)
-			std::memmove(usr.in, std::span(usr.in, usr.in_size).subspan(read, usr.in_size - read).data(), usr.in_size - read);
+			std::memmove(usr.in, std::span(usr.in).first(usr.in_size).subspan(read, usr.in_size - read).data(), usr.in_size - read);
 		usr.in_size -= read;
 	}
 

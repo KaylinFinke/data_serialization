@@ -1,11 +1,11 @@
-#if not defined(CD733C0AAD5448EEB4705E5A0BFA0510)
+#ifndef CD733C0AAD5448EEB4705E5A0BFA0510
 #define CD733C0AAD5448EEB4705E5A0BFA0510
-#if defined(CD733C0AAD5448EEB4705E5A0BFA0510)
+#ifdef CD733C0AAD5448EEB4705E5A0BFA0510
 
 #include <concepts>
 #include <cstddef>
 #include <type_traits>
-namespace type_conversion {
+namespace zero_cost_serialization {
 	namespace detail {
 		template<typename T, typename U>
 		struct is_cv_similar : std::is_same<T, U> {};
