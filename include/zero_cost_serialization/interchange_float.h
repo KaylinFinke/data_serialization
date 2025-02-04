@@ -1,6 +1,8 @@
-#if not defined(F4936E35FA8C4BD8A6390722AEA95FBB)
+#ifndef F4936E35FA8C4BD8A6390722AEA95FBB
 #define F4936E35FA8C4BD8A6390722AEA95FBB
-#if defined(F4936E35FA8C4BD8A6390722AEA95FBB)
+#ifdef F4936E35FA8C4BD8A6390722AEA95FBB
+
+#include "zero_cost_serialization/serializable.h"
 
 #include <bit>
 #include <cmath>
@@ -9,28 +11,13 @@
 #include <limits>
 
 
-namespace data_serialization {
+namespace zero_cost_serialization {
 	namespace detail {
 		template <typename I, typename F, int M, int E>
 		concept native_float = requires
 		{
-			requires std::endian::native == std::endian::little
-			or std::endian::native == std::endian::big;
-
-			requires std::floating_point<F>;
-			requires sizeof(F)* std::numeric_limits<unsigned char>::digits == M + E;
-			requires std::numeric_limits<F>::is_iec559;
-			requires std::numeric_limits<F>::digits == M;
-			requires std::numeric_limits<F>::radix == 2;
-			requires std::numeric_limits<F>::max_exponent == (((1ULL << E) - 1) - (((1ULL << E) - 1) / 2));
-			requires std::numeric_limits<F>::min_exponent == (2 - (((1ULL << E) - 1) / 2));
-
-			requires std::integral<I>;
-			requires std::has_unique_object_representations_v<I>;
-			requires sizeof(I) * std::numeric_limits<unsigned char>::digits == M + E;
-			requires std::numeric_limits<I>::is_integer;
-			requires (std::numeric_limits<I>::digits == M + E and std::unsigned_integral<I>)
-			or (std::numeric_limits<I>::digits + 1 == M + E and std::signed_integral<I>);
+			requires zero_cost_serialization::detail::ieee754_interchange_binary<F, M, E>;
+			requires zero_cost_serialization::detail::twos_complement_interchange_binary<I, M + E>;
 		};
 
 		template <int M, std::integral T>

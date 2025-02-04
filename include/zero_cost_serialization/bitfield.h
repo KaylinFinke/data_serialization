@@ -1,9 +1,10 @@
-#if not defined(CE0B1D5104534E44A2E29836848BB48C)
+#ifndef CE0B1D5104534E44A2E29836848BB48C
 #define CE0B1D5104534E44A2E29836848BB48C
-#if defined(CE0B1D5104534E44A2E29836848BB48C)
+#ifdef CE0B1D5104534E44A2E29836848BB48C
 
-#include "strict_alias.h"
-#include "interchange_float.h"
+#include "zero_cost_serialization/strict_alias.h"
+#include "zero_cost_serialization/interchange_float.h"
+#include "zero_cost_serialization/serializable.h"
 
 #include <algorithm>
 #include <array>
@@ -21,17 +22,17 @@
 #include <utility>
 #include <span>
 
-namespace common_platform {
+namespace zero_cost_serialization {
 	namespace detail {
 		template <typename T>
-		struct underlying_type final
+		struct underlying_type
 		{
 			using type = T;
 		};
 
 		template <typename T>
-			requires std::is_enum_v<T>
-		struct underlying_type<T> final
+		requires std::is_enum_v<T>
+		struct underlying_type<T>
 		{
 			using type = std::underlying_type_t<T>;
 		};
@@ -39,7 +40,7 @@ namespace common_platform {
 		template <typename T>
 		using underlying_integral = typename underlying_type<T>::type;
 
-		struct integer_iterator final
+		struct integer_iterator
 		{
 			using iterator_concept = std::forward_iterator_tag;
 			using value_type = std::size_t;
@@ -53,7 +54,7 @@ namespace common_platform {
 	}
 	template <std::floating_point F, int M, int E, std::integral T>
 	requires (std::numeric_limits<T>::digits >= (M + E) - std::is_signed_v<T>)
-	struct float_constant  final : std::integral_constant<T, M + E>
+	struct float_constant  : std::integral_constant<T, M + E>
 	{
 		using float_type = F;
 		static constexpr int m_bits = M;
@@ -92,13 +93,13 @@ namespace common_platform {
 	template <typename... Ts>
 	requires ((detail::is_integral_bitfield_element_v<Ts> or detail::is_float_bitfield_element_v<Ts>) and ...) and
 	(std::disjunction_v<std::is_integral<decltype(Ts::value)>, std::is_enum<decltype(Ts::value)>> and ...) and
-	((std::numeric_limits<type_conversion::detail::corresponding_unsigned_type<detail::underlying_integral<decltype(Ts::value)>>>::digits
+	((std::numeric_limits<zero_cost_serialization::detail::corresponding_unsigned_type<detail::underlying_integral<decltype(Ts::value)>>>::digits
 	>= static_cast<detail::underlying_integral<decltype(Ts::value)>>(Ts::value)) and ...)
-	struct bitfield final
+	struct bitfield
 	{
 	private:
 		using common_type = typename std::conditional_t<bool(sizeof...(Ts)),
-			std::common_type<std::make_unsigned_t<decltype(+std::declval<detail::underlying_integral<std::remove_cv_t<decltype(Ts::value)>>>())>...>, 
+			std::common_type<std::make_unsigned_t<decltype(+std::declval<detail::underlying_integral<std::remove_cv_t<decltype(Ts::value)>>>())>...>,
 			std::enable_if<true, std::size_t>>::type;
 
 		using tuple = std::tuple<Ts...>;
@@ -122,43 +123,55 @@ namespace common_platform {
 		using int_type = std::remove_cv_t<decltype(std::tuple_element_t<N, tuple>::value)>;
 
 		template <typename T, typename = void>
-		struct runtime final
+		struct runtime
 		{
 			using type = std::remove_cv_t<decltype(T::value)>;
 		};
 
 		template <typename T>
-		struct runtime<T, std::void_t<typename T::float_type>> final
+		struct runtime<T, std::void_t<typename T::float_type>>
 		{
 			using type = typename T::float_type;
 		};
 
 		template <typename T, typename = void>
-		struct mantissa final
+		struct mantissa
 		{
 			static constexpr int m_bits = 0;
 		};
 
 		template <typename T>
-		struct mantissa<T, std::void_t<typename T::float_type>> final
+		struct mantissa<T, std::void_t<typename T::float_type>>
 		{
 			static constexpr int m_bits = T::m_bits;
 		};
 
 		template <typename T, typename = void>
-		struct exponent final
+		struct exponent
 		{
 			static constexpr int m_bits = 0;
 		};
 
 		template <typename T>
-		struct exponent<T, std::void_t<typename T::float_type>> final
+		struct exponent<T, std::void_t<typename T::float_type>>
 		{
 			static constexpr int e_bits = T::e_bits;
 		};
 
+		template <std::size_t, typename = void>
+		struct runtime_or_int
+		{
+			using type = int;
+		};
+
 		template <std::size_t N>
-		using runtime_type = typename runtime<std::tuple_element_t<N, tuple>>::type;
+		struct runtime_or_int <N, std::enable_if_t<N < sizeof...(Ts)>>
+		{
+			using type = typename runtime<std::tuple_element_t<N, tuple>>::type;
+		};
+
+		template <std::size_t N>
+		using runtime_type = typename runtime_or_int<N>::type;
 
 		template <std::size_t N>
 		static constexpr auto m_bits = mantissa<std::tuple_element_t<N, tuple>>::m_bits;
@@ -183,7 +196,7 @@ namespace common_platform {
 		static constexpr auto bytes = std::size_t{ bits / std::numeric_limits<unsigned char>::digits + ((bits % std::numeric_limits<unsigned char>::digits) not_eq 0) };
 
 		template <typename T, std::size_t N>
-		static consteval auto find_index(std::same_as<std::size_t> auto& i, std::same_as<bool> auto& unique) noexcept
+		static consteval auto find_index(std::size_t& i, bool& unique) noexcept
 		{
 			if constexpr (std::is_same_v<T, runtime_type<N>>) {
 				unique = i == sizeof...(Ts);
@@ -211,13 +224,13 @@ namespace common_platform {
 		static constexpr auto type_index = index<T>();
 
 		//NOTE: enumerations in C++ are open. They can support either the range of the underlying type
-		// (if fixed type) or the smallest n denoting a range [-2^(n-1), 2^(n-1)) or [0, 2^n) that can 
+		// (if fixed type) or the smallest n denoting a range [-2^(n-1), 2^(n-1)) or [0, 2^n) that can
 		// hold the values of the named enumerators (for enumerations without fixed type).
-		//DANGER: Convering a value to an enumeration without a fixed type e.g. enum foo { ... } 
-		// or enum class bar { ... } that is not in the range of the enumeration (above) is undefined 
-		// behavior. This property, combined with the fact that the underlying type of enumerations 
-		// without a fixed type is often int, means reading an enumeration without a fixed type has 
-		// undefined behavior for some possible values in almost all cases. Prefer fixed type 
+		//DANGER: Convering a value to an enumeration without a fixed type e.g. enum foo { ... }
+		// or enum class bar { ... } that is not in the range of the enumeration (above) is undefined
+		// behavior. This property, combined with the fact that the underlying type of enumerations
+		// without a fixed type is often int, means reading an enumeration without a fixed type has
+		// undefined behavior for some possible values in almost all cases. Prefer fixed type
 		// enumerations which do not have this pitfall.
 		template <std::size_t N>
 		requires (N < sizeof...(Ts) and (not size<N>() or has_fast_path<N>()))
@@ -286,15 +299,15 @@ namespace common_platform {
 				return static_cast<int_type<N>>(v & (std::numeric_limits<unsigned_type>::max() >> hi_bits));
 		}
 
-		//NOTE: If the type or underlying type (if enum) is unsigned, the value does not change 
-		// if the source value can be represented in the target bitfield. Otherwise the result 
-		// is equal to the source value modulo 2^n where n is the number of bits in the bitfield. 
+		//NOTE: If the type or underlying type (if enum) is unsigned, the value does not change
+		// if the source value can be represented in the target bitfield. Otherwise the result
+		// is equal to the source value modulo 2^n where n is the number of bits in the bitfield.
 		// This is consistent with the behavior of builtin types.
 		//-------------------------------------------------------------------------------------
-		//NOTE: If the type or underlying type (if enum) is signed, the value does not change 
-		// if the source value can be represented in the target bitfield. Otherwise the result 
-		// is the unique value of the destination type equal to the source value modulo 2^n where 
-		// n is the number of bits in the bitfield. This is consistent with the behavior of builtin 
+		//NOTE: If the type or underlying type (if enum) is signed, the value does not change
+		// if the source value can be represented in the target bitfield. Otherwise the result
+		// is the unique value of the destination type equal to the source value modulo 2^n where
+		// n is the number of bits in the bitfield. This is consistent with the behavior of builtin
 		// types.
 		//-------------------------------------------------------------------------------------
 		//WARNING: Value conversion can be surprising. For example, 32768 interpreted as a signed
@@ -303,12 +316,12 @@ namespace common_platform {
 		//DANGER: The underlying type of an enumeration with no fixed type is the type of rank equal
 		// or greater than int that can support the underlying range. This usually means bitfields
 		// for enumerations without a fixed type are signed, and may not be able to represent the
-		// expected range. e.g. the values of enum { cat, bird, fish } are [0, 4) with 3 unnamed, 
+		// expected range. e.g. the values of enum { cat, bird, fish } are [0, 4) with 3 unnamed,
 		// the underlying type is int (for conforming implementations), but a 2 bit bitfield can
 		// hold the values [-2, 2). Note converting a negative value to this enumeration type is
 		// undefined behavior.
 		//--------------------------------------------------------------------------------------
-		//DANGER: enumerations without a fixed type e.g. enum foo { ... } or enum class bar { ... } 
+		//DANGER: enumerations without a fixed type e.g. enum foo { ... } or enum class bar { ... }
 		// ONLY have an underlying range large enough to support their enumerators fit in a small power
 		// of 2. In addition, the enumeration range is open so enum { cat, bird, fish } can hold the
 		// values 0, 1, 2, and 3. There is NO way to enforce not picking a larger bitfield width for
@@ -316,8 +329,8 @@ namespace common_platform {
 		// prefer typed enumerations, or be very careful when selecting the bitfield width to not allow
 		// width larger than minimally necessary to store all enumerators.
 		//-------------------------------------------------------------------------------------
-		//DANGER: If the field is not aligned to a byte for both leading and trailing bits, 
-		// and the underlying storage is of an indeterminate value e.g. not initialized, 
+		//DANGER: If the field is not aligned to a byte for both leading and trailing bits,
+		// and the underlying storage is of an indeterminate value e.g. not initialized,
 		// the behavior is undefined. initialize to {} if filling out your own structure.
 		//-------------------------------------------------------------------------------------
 		template <std::size_t N>
@@ -415,7 +428,7 @@ namespace common_platform {
 		};
 
 	public:
-		//NOTE: Alignment does not change the layout of the bitfield, instead larger alignment allows 
+		//NOTE: Alignment does not change the layout of the bitfield, instead larger alignment allows
 		// potentially faster access using aligned load/store on some platforms. Native bitfields are
 		// usually aligned to their largest member type. Prefer the same when possible.
 		//-------------------------------------------------------------------------------------
@@ -428,7 +441,7 @@ namespace common_platform {
 		requires (N < sizeof...(Ts))
 		constexpr auto set_value(const runtime_type<N>& value) noexcept
 		{
-			if constexpr (std::is_floating_point_v<runtime_type<N>>) set_integral<N>(data_serialization::from_float<int_type<N>, m_bits<N>, e_bits<N>>(value));
+			if constexpr (std::is_floating_point_v<runtime_type<N>>) set_integral<N>(zero_cost_serialization::from_float<int_type<N>, m_bits<N>, e_bits<N>>(value));
 			else set_integral<N>(value);
 		}
 
@@ -443,7 +456,7 @@ namespace common_platform {
 		requires (N < sizeof...(Ts))
 		[[nodiscard]] constexpr auto get_value() const noexcept
 		{
-			if constexpr (std::is_floating_point_v<runtime_type<N>>) return data_serialization::to_float<runtime_type<N>, m_bits<N>, e_bits<N>>(get_integral<N>());
+			if constexpr (std::is_floating_point_v<runtime_type<N>>) return zero_cost_serialization::to_float<runtime_type<N>, m_bits<N>, e_bits<N>>(get_integral<N>());
 			else return get_integral<N>();
 		}
 
@@ -599,9 +612,44 @@ namespace common_platform {
 			std::ranges::copy(v, std::span(s). template subspan<N, sizeof(T)>().data());
 		}
 	};
+	namespace detail {
+		template <typename... Ts>
+		struct is_bitfield : std::false_type {};
+		template <typename... Ts>
+		struct is_bitfield<bitfield<Ts...>> : std::true_type {};
+		template <typename... Ts>
+		struct is_bitfield<const bitfield<Ts...>> : std::true_type {};
+		template <typename... Ts>
+		struct is_bitfield<volatile bitfield<Ts...>> : std::true_type {};
+		template <typename... Ts>
+		struct is_bitfield<const volatile bitfield<Ts...>> : std::true_type {};
+
+		template <typename T>
+		concept reflectable_bitfield = requires
+		{
+			requires non_empty_aggregate_class<T>;
+			requires trivial_and_standard_layout<T>;
+			requires std::regular<T>;
+			requires is_bitfield<T>::value;
+			requires bool(std::tuple_size_v<T>);
+		};
+	}
+
+	template <detail::reflectable_bitfield B, typename Traits>
+	struct is_serializable_type<B, Traits> {
+		constexpr auto operator()(bool& result, std::size_t& offset, std::size_t& align) noexcept
+		{
+			if constexpr (not std::has_unique_object_representations_v<B>) result = false;
+			else if (offset % alignof(B)) result = false;
+			else {
+				offset += sizeof(B);
+				align = std::max(align, alignof(B));
+			}
+		}
+	};
 
 	template <typename... Ts>
-	requires (common_platform::detail::is_integral_bitfield_element_v<Ts> and ...)
+	requires (zero_cost_serialization::detail::is_integral_bitfield_element_v<Ts> and ...)
 	[[nodiscard]] constexpr auto operator<=>(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
 	{
 		return[]<std::size_t... Is>(const std::index_sequence<Is...>&, const auto& l, const auto& r)
@@ -613,14 +661,14 @@ namespace common_platform {
 	}
 
 	template <typename... Ts>
-	requires (common_platform::detail::is_integral_bitfield_element_v<Ts> and ...)
+	requires (zero_cost_serialization::detail::is_integral_bitfield_element_v<Ts> and ...)
 	[[nodiscard]] constexpr auto operator==(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
 	{
 		return a <=> b == std::strong_ordering::equal;
 	}
 
 	template <typename... Ts>
-	requires (common_platform::detail::is_float_bitfield_element_v<Ts> or ...)
+	requires (zero_cost_serialization::detail::is_float_bitfield_element_v<Ts> or ...)
 	[[nodiscard]] constexpr auto operator<=>(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
 	{
 		return[]<std::size_t... Is>(const std::index_sequence<Is...>&, const auto & l, const auto & r)
@@ -632,7 +680,7 @@ namespace common_platform {
 	}
 
 	template <typename... Ts>
-	requires (common_platform::detail::is_float_bitfield_element_v<Ts> or ...)
+	requires (zero_cost_serialization::detail::is_float_bitfield_element_v<Ts> or ...)
 	[[nodiscard]] constexpr auto operator==(const bitfield<Ts...>& a, const bitfield<Ts...>& b) noexcept
 	{
 		return a <=> b == std::partial_ordering::equivalent;
@@ -640,18 +688,18 @@ namespace common_platform {
 }
 namespace std {
 	template <typename... Ts>
-	struct tuple_size<common_platform::bitfield<Ts...>> final
+	struct tuple_size<zero_cost_serialization::bitfield<Ts...>>
 		: std::integral_constant<std::size_t, sizeof...(Ts)> {};
 
 	template <std::size_t I, typename... Ts>
-	struct tuple_element<I, common_platform::bitfield<Ts...>> final
+	struct tuple_element<I, zero_cost_serialization::bitfield<Ts...>>
 	{
 		using type = std::remove_cv_t<decltype(std::tuple_element_t<I, std::tuple<Ts...>>::value)>;
 	};
 
 	template <typename... Ts>
-	requires (common_platform::detail::is_integral_bitfield_element_v<Ts> and ...)
-	struct hash<common_platform::bitfield<Ts...>> final { [[nodiscard]] constexpr auto operator()(const common_platform::bitfield<Ts...>& b) const noexcept
+	requires (zero_cost_serialization::detail::is_integral_bitfield_element_v<Ts> and ...)
+	struct hash<zero_cost_serialization::bitfield<Ts...>> { [[nodiscard]] constexpr auto operator()(const zero_cost_serialization::bitfield<Ts...>& b) const noexcept
 	{
 		constexpr auto bit_size = (Ts::value + ... + 0);
 		constexpr auto trailing_bits = bit_size % std::numeric_limits<unsigned char>::digits;
@@ -665,8 +713,8 @@ namespace std {
 	}};
 
 	template <typename... Ts>
-	requires (common_platform::detail::is_float_bitfield_element_v<Ts> or ...)
-	struct hash<common_platform::bitfield<Ts...>> final { [[nodiscard]] constexpr auto operator()(const common_platform::bitfield<Ts...>& b) const noexcept
+	requires (zero_cost_serialization::detail::is_float_bitfield_element_v<Ts> or ...)
+	struct hash<zero_cost_serialization::bitfield<Ts...>> { [[nodiscard]] constexpr auto operator()(const zero_cost_serialization::bitfield<Ts...>& b) const noexcept
 	{
 		return [&] <std::size_t... Is>(const std::index_sequence<Is...>&) {
 			auto hash_element = []<typename T>(auto h, T t) {
